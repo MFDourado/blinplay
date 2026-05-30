@@ -535,18 +535,60 @@ function playerBtn(){return `<button class="ghost" onclick="openPlayer()">▷ Ve
 
 const VIEWS = {
   /* ===== ADMIN ===== */
-  overview(){
-    const on=ESTACOES.filter(e=>e.on).length;
+  async overview(){
+    const hoje=new Date().toISOString().slice(0,10);
+    const [accsR, chsR, campsR] = await Promise.all([
+      sb.from('accounts').select('id,plano').eq('ativo',true),
+      sb.from('channels').select('id,nome,last_seen_at,player_version,account_id,accounts(nome)').eq('ativo',true).order('created_at'),
+      sb.from('campaigns').select('id,nome,data_inicio,data_fim,ativo,accounts(nome)')
+    ]);
+    const accs=accsR.data||[], chs=chsR.data||[], camps=campsR.data||[];
+    const contasCliente=accs.filter(a=>a.plano!=='interno').length;
+    const online=chs.filter(c=>c.last_seen_at && (Date.now()-new Date(c.last_seen_at).getTime()<5*60*1000)).length;
+    const campsAtivas=camps.filter(c=>c.ativo && hoje>=c.data_inicio && hoje<=c.data_fim);
+
+    // tabela de canais com status
+    let chRows;
+    if(chs.length===0){
+      chRows='<tr><td colspan="4"><div class="empty"><b>Nenhum canal ainda</b>Cadastre uma conta e seus canais para começar.</div></td></tr>';
+    } else {
+      chRows=chs.map(c=>{
+        const on=c.last_seen_at && (Date.now()-new Date(c.last_seen_at).getTime()<5*60*1000);
+        const visto=c.last_seen_at?tempoRel(c.last_seen_at):'nunca';
+        return `<tr class="row">
+          <td><div class="est-name">${c.accounts?c.accounts.nome:'—'}</div><div class="est-sub">Canal: ${c.nome}</div></td>
+          <td><span class="stat ${on?'on':'off'}"><span class="dot ${on?'on':'off'}"></span>${on?'Online':'Offline'}</span></td>
+          <td style="color:var(--mut)">${visto}</td>
+          <td style="color:var(--mut)">${c.player_version||'—'}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    // campanhas no ar
+    let campHtml='';
+    if(campsAtivas.length){
+      campHtml=`<div class="panel"><div class="panel-h"><h3>Campanhas no ar agora</h3><span class="hint">${campsAtivas.length} ativa(s)</span></div>`
+        + campsAtivas.map(c=>{
+            const df=c.data_fim.split('-').reverse().join('/');
+            return `<div class="camp">
+              <div class="camp-ic" style="background:rgba(245,168,0,.18);border:1px solid rgba(245,168,0,.4)">◷</div>
+              <div class="camp-main"><div class="cn">${c.nome}</div><div class="cd">${c.accounts?c.accounts.nome:''} · até ${df}</div></div>
+              <span class="badge live">● No ar</span>
+            </div>`;
+          }).join('') + `</div>`;
+    }
+
     return topbar('Visão Geral','Operação de todos os canais · '+new Date().toLocaleDateString('pt-BR'), playerBtn())
     +`<div class="kpis">
-        <div class="kpi"><div class="lab">Contas ativas</div><div class="val">4</div></div>
-        <div class="kpi"><div class="lab">Canais</div><div class="val">${ESTACOES.length}</div></div>
-        <div class="kpi"><div class="lab">Online agora</div><div class="val" style="color:var(--on)">${on}<small>/${ESTACOES.length}</small></div></div>
-        <div class="kpi"><div class="lab">Campanhas no ar</div><div class="val" style="color:var(--gold)">1</div></div>
+        <div class="kpi"><div class="lab">Hotéis (contas)</div><div class="val">${contasCliente}</div></div>
+        <div class="kpi"><div class="lab">Canais</div><div class="val">${chs.length}</div></div>
+        <div class="kpi"><div class="lab">Online agora</div><div class="val" style="color:var(--on)">${online}<small>/${chs.length}</small></div></div>
+        <div class="kpi"><div class="lab">Campanhas no ar</div><div class="val" style="color:var(--gold)">${campsAtivas.length}</div></div>
       </div>
-      <div class="note">⚡ <div><b>Acesso remoto à tela</b> (Fully Remote Admin / TeamViewer) é exclusivo deste painel. O cliente só recebe status e reboot.</div></div>`
-    + estacoesTable(true)
-    + campPanel(CAMP);
+      <div class="note">⚡ <div><b>Acesso remoto à tela</b> (Fully Remote Admin / TeamViewer) é exclusivo deste painel. O cliente só recebe status e reboot.</div></div>
+      <div class="panel"><div class="panel-h"><h3>Canais</h3><span class="hint">online = visto nos últimos 5 min</span></div>
+        <table><thead><tr><th>Hotel / Canal</th><th>Status</th><th>Último acesso</th><th>Versão</th></tr></thead><tbody>${chRows}</tbody></table></div>`
+    + campHtml;
   },
   async estacoes(){
     const { data: chs, error } = await sb.from('channels')
