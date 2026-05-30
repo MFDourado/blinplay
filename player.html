@@ -92,23 +92,37 @@ function montarPlaylist(data){
     return out;
   }
 
-  // monta o rodízio: insere item de campanha a cada N do padrão
+  // PRESENÇA MÍNIMA GARANTIDA:
+  // o intervalo efetivo nunca passa do tamanho do padrão — assim toda campanha
+  // ativa entra PELO MENOS 1x por volta do rodízio, independente do N escolhido.
+  // O N só REDUZ o intervalo (= mais presença) quando o padrão é grande.
   const out=[];
   let count=0;
-  // ponteiros circulares pra cada campanha (revezam suas mídias)
-  const campPtr = camps.map(()=>0);
+  const campPtr = camps.map(()=>0);   // ponteiro circular das mídias de cada campanha
+  const campInseriu = camps.map(()=>false); // se a campanha já entrou nesta volta
 
   for(let i=0;i<padrao.length;i++){
     out.push(padrao[i]); count++;
     camps.forEach((c,ci)=>{
-      const N = Math.max(1, c.frequencia_a_cada||4);
+      // intervalo pedido, mas no máximo o tamanho do padrão (garante 1x/volta)
+      const N = Math.min(Math.max(1, c.frequencia_a_cada||4), padrao.length);
       if(count % N === 0){
         const it = c.itens[campPtr[ci] % c.itens.length];
-        campPtr[ci]++;
+        campPtr[ci]++; campInseriu[ci]=true;
         out.push({...it, camp:true, campNome:c.nome});
       }
     });
   }
+
+  // rede de segurança: se por algum arredondamento uma campanha não entrou
+  // nenhuma vez nesta volta, insere ela 1x no fim — nunca fica de fora.
+  camps.forEach((c,ci)=>{
+    if(!campInseriu[ci]){
+      const it = c.itens[campPtr[ci] % c.itens.length];
+      out.push({...it, camp:true, campNome:c.nome});
+    }
+  });
+
   return out;
 }
 
@@ -236,12 +250,26 @@ function ligarRealtime(){
     rtDebounce = setTimeout(()=> sincronizar(false), 800); // agrupa eventos em 0,8s
   };
 
+  // mudança no canal: pode ser conteúdo OU um pedido de refresh remoto
+  const aoMudarCanal = (payload)=>{
+    const novo = payload && payload.new ? payload.new : null;
+    // se é o NOSSO canal e veio um pedido de refresh recente, recarrega a página
+    if(novo && CHANNEL_ID && novo.id===CHANNEL_ID && novo.refresh_pedido_em){
+      const quando = new Date(novo.refresh_pedido_em).getTime();
+      if(Date.now() - quando < 60000){   // pedido dos últimos 60s
+        location.reload();
+        return;
+      }
+    }
+    aoMudar();
+  };
+
   rtChannel = sb.channel('blinplay-' + (CHANNEL_ID||token))
     .on('postgres_changes', { event:'*', schema:'public', table:'playlist_items'    }, aoMudar)
     .on('postgres_changes', { event:'*', schema:'public', table:'campaigns'          }, aoMudar)
     .on('postgres_changes', { event:'*', schema:'public', table:'campaign_items'      }, aoMudar)
     .on('postgres_changes', { event:'*', schema:'public', table:'campaign_channels'   }, aoMudar)
-    .on('postgres_changes', { event:'*', schema:'public', table:'channels'            }, aoMudar)
+    .on('postgres_changes', { event:'*', schema:'public', table:'channels'            }, aoMudarCanal)
     .subscribe((status)=>{
       // se a conexão fechar/expirar, tenta religar em 10s
       if(status==='CLOSED' || status==='CHANNEL_ERROR' || status==='TIMED_OUT'){
