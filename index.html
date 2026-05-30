@@ -225,6 +225,8 @@
   .fmsg.err{color:#ffb3ba}.fmsg.ok{color:#9af0cf}
   .empty{text-align:center;padding:50px 20px;color:var(--mut)}
   .empty b{display:block;font-family:'Saira';font-size:16px;color:var(--txt);margin-bottom:6px}
+  .mactions{display:flex;gap:6px;margin-top:9px}
+  .mactions .mini{flex:1;text-align:center;padding:6px 4px;font-size:11px}
 </style>
 </head>
 <body>
@@ -688,10 +690,52 @@ function mediaPanelReal(list, isAdmin){
       <div class="minfo">
         <div class="mt">${m.nome}</div>
         <div class="ms">${isVid? m.duracao_seg+'s' : m.duracao_seg+'s na tela'}${tam?' · '+tam:''}${isAdmin&&m.accounts?' · '+m.accounts.nome:''}</div>
+        <div class="mactions">
+          <button class="mini" onclick="editarMidia('${m.id}','${(m.nome||'').replace(/'/g,"\\'")}',${m.duracao_seg},'${m.tipo}')">✎ Editar</button>
+          <button class="mini danger" onclick="excluirMidia('${m.id}','${m.storage_path}','${(m.nome||'').replace(/'/g,"\\'")}')">🗑 Excluir</button>
+        </div>
       </div>
     </div>`;
   }).join('');
   return `<div class="panel"><div class="panel-h"><h3>Biblioteca</h3><span class="hint">o player faz cache local no box</span></div><div class="mgrid">${cards}</div></div>`;
+}
+
+async function excluirMidia(id, path, nome){
+  if(!confirm('Excluir a mídia "'+nome+'"?\n\nIsso remove o arquivo e tira ela de qualquer playlist/campanha. Não dá pra desfazer.')) return;
+  try{
+    // 1) remove o registro (o banco apaga em cascata os usos em playlist/campanha)
+    const { error } = await sb.from('media').delete().eq('id', id);
+    if(error) throw error;
+    // 2) remove o arquivo do bucket
+    await sb.storage.from('blinplay-media').remove([path]);
+    render();
+  }catch(ex){ alert('Erro ao excluir: '+(ex.message||ex)); }
+}
+
+function editarMidia(id, nome, dur, tipo){
+  const isVid = tipo==='video';
+  abrirModal(`
+    <h3>Editar mídia</h3>
+    <div class="fsub">Altere o nome${isVid?'':' ou o tempo na tela'}.</div>
+    <div class="fld"><label>Nome / título</label><input id="em_nome" value="${(nome||'').replace(/"/g,'&quot;')}"></div>
+    ${isVid?'':`<div class="fld"><label>Tempo na tela (segundos)</label><input id="em_dur" type="number" value="${dur}" min="3" max="60"></div>`}
+    <div id="em_msg" class="fmsg"></div>
+    <div class="form-actions">
+      <button class="fa-cancel" onclick="fecharModal()">Cancelar</button>
+      <button class="fa-save" onclick="salvarEdicaoMidia('${id}','${tipo}')">Salvar</button>
+    </div>`);
+}
+async function salvarEdicaoMidia(id, tipo){
+  const nome=val('em_nome');
+  const msg=document.getElementById('em_msg');
+  if(!nome){ msg.className='fmsg err'; msg.textContent='Dê um nome.'; return; }
+  const patch={ nome };
+  if(tipo!=='video'){ patch.duracao_seg = parseInt(val('em_dur')||'8',10); }
+  msg.className='fmsg'; msg.textContent='Salvando…';
+  const { error } = await sb.from('media').update(patch).eq('id', id);
+  if(error){ msg.className='fmsg err'; msg.textContent='Erro: '+error.message; return; }
+  msg.className='fmsg ok'; msg.textContent='Salvo!';
+  setTimeout(()=>{ fecharModal(); render(); }, 400);
 }
 
 async function novaMidia(){
