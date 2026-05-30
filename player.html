@@ -52,7 +52,7 @@
 const SB_URL = 'https://wjyaxmbkdjebulosdtds.supabase.co';
 const SB_KEY = 'sb_publishable_mmTZZoQCGe24bTshASUi1w_JKnyU4sv';
 const MEDIA_BASE = SB_URL + '/storage/v1/object/public/blinplay-media/';
-const RESYNC_MS = 5 * 60 * 1000;   // re-busca a programação a cada 5 min
+const RESYNC_MS = 5 * 60 * 1000;   // FALLBACK: re-checa a cada 5 min se o Realtime cair
 
 /* ================= ESTADO ================= */
 let sb = null;
@@ -61,6 +61,9 @@ let playlist = [];      // sequência final já montada (padrão + campanhas no 
 let idx = 0;
 let slideTimer = null;
 let lastSig = '';       // assinatura da playlist (pra trocar só quando muda)
+let CHANNEL_ID = null;  // id do canal (vem da RPC) — usado no Realtime
+let rtChannel = null;   // canal de assinatura Realtime
+let rtDebounce = null;  // evita re-sync múltiplo em rajada de eventos
 
 /* ================= HELPERS UI ================= */
 function showMsg(txt, spinning){
@@ -181,6 +184,7 @@ async function sincronizar(primeira){
     }
     // guarda a última programação boa (pra abrir offline na próxima vez)
     try{ localStorage.setItem('blinplay_sched_'+token, JSON.stringify(data)); }catch(e){}
+    if(data.canal && data.canal.id) CHANNEL_ID = data.canal.id;
     aplicarPrograma(data, primeira);
     precarregarMidias(data);   // manda o cache baixar tudo em background
   }catch(ex){
@@ -218,6 +222,34 @@ function precarregarMidias(data){
   });
 }
 
+/* ================= REALTIME =================
+   Assina mudanças nas tabelas que afetam a programação. Em vez de
+   ficar perguntando ao banco, o player é AVISADO no instante da mudança
+   e re-sincroniza na hora (com debounce pra agrupar rajadas de eventos).
+   Se a conexão cair, o setInterval de fallback (5 min) cobre o intervalo.
+*/
+function ligarRealtime(){
+  if(rtChannel){ try{ sb.removeChannel(rtChannel); }catch(e){} }
+
+  const aoMudar = ()=>{
+    clearTimeout(rtDebounce);
+    rtDebounce = setTimeout(()=> sincronizar(false), 800); // agrupa eventos em 0,8s
+  };
+
+  rtChannel = sb.channel('blinplay-' + (CHANNEL_ID||token))
+    .on('postgres_changes', { event:'*', schema:'public', table:'playlist_items'    }, aoMudar)
+    .on('postgres_changes', { event:'*', schema:'public', table:'campaigns'          }, aoMudar)
+    .on('postgres_changes', { event:'*', schema:'public', table:'campaign_items'      }, aoMudar)
+    .on('postgres_changes', { event:'*', schema:'public', table:'campaign_channels'   }, aoMudar)
+    .on('postgres_changes', { event:'*', schema:'public', table:'channels'            }, aoMudar)
+    .subscribe((status)=>{
+      // se a conexão fechar/expirar, tenta religar em 10s
+      if(status==='CLOSED' || status==='CHANNEL_ERROR' || status==='TIMED_OUT'){
+        setTimeout(ligarRealtime, 10000);
+      }
+    });
+}
+
 /* ================= INÍCIO ================= */
 function init(){
   const params = new URLSearchParams(location.search);
@@ -236,9 +268,9 @@ function init(){
     navigator.serviceWorker.register('sw.js').catch(()=>{});
   }
 
-  sincronizar(true);
+  sincronizar(true).then(ligarRealtime);
 
-  // re-sincroniza periodicamente (pega campanhas que entram/saem e mudanças de conteúdo)
+  // FALLBACK de segurança: se o Realtime cair (net instável), isso cobre.
   setInterval(()=> sincronizar(false), RESYNC_MS);
 
   // mantém a tela acordada (best-effort; o Fully reforça isso no box)
