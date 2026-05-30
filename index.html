@@ -159,6 +159,7 @@
   .badge.live{background:rgba(52,211,153,.14);color:var(--on);border:1px solid rgba(52,211,153,.3)}
   .badge.sched{background:rgba(90,169,255,.12);color:var(--info);border:1px solid rgba(90,169,255,.3)}
   .badge.done{background:rgba(255,255,255,.06);color:var(--mut2);border:1px solid var(--line)}
+  .badge.paused{background:rgba(245,168,0,.12);color:var(--gold);border:1px solid rgba(245,168,0,.35)}
   .freq{font-size:11.5px;color:var(--mut);background:var(--surf2);border:1px solid var(--line);padding:4px 9px;border-radius:8px;white-space:nowrap}
 
   .note{display:flex;gap:11px;background:var(--gold-soft);border:1px solid rgba(245,168,0,.25);border-radius:var(--rs);padding:13px 15px;font-size:12.5px;color:#f0d9a8;margin-bottom:20px}
@@ -489,7 +490,7 @@ const VIEWS = {
     } else {
       rows = camps.map(c=>{
         let st, badge;
-        if(!c.ativo){ st='Pausada'; badge='done'; }
+        if(!c.ativo){ st='Pausada'; badge='paused'; }
         else if(hoje < c.data_inicio){ st='Agendada'; badge='sched'; }
         else if(hoje > c.data_fim){ st='Encerrada'; badge='done'; }
         else { st='No ar'; badge='live'; }
@@ -500,6 +501,7 @@ const VIEWS = {
           <div class="camp-main"><div class="cn">${c.nome}</div><div class="cd">${di} → ${df} · ${c.accounts?c.accounts.nome:''}</div></div>
           <span class="freq">1 a cada ${c.frequencia_a_cada}</span>
           <span class="badge ${badge}">${badge==='live'?'● ':''}${st}</span>
+          <button class="mini" onclick="togglePausaCampanha('${c.id}',${c.ativo})">${c.ativo?'⏸ Pausar':'▶ Retomar'}</button>
           <button class="mini" onclick="editarCampanha('${c.id}')">Editar</button>
           <button class="mini danger" onclick="excluirCampanha('${c.id}','${(c.nome||'').replace(/'/g,"\\'")}')">Excluir</button>
         </div>`;
@@ -1019,6 +1021,12 @@ async function editarCampanha(id){
 async function excluirCampanha(id, nome){
   if(!confirm('Excluir a campanha "'+nome+'"?\n\nEla sai do ar imediatamente. Não dá pra desfazer.')) return;
   const { error } = await sb.from('campaigns').delete().eq('id',id);
+  if(error){ alert('Erro: '+error.message); return; }
+  render();
+}
+
+async function togglePausaCampanha(id, estaAtiva){
+  const { error } = await sb.from('campaigns').update({ ativo: !estaAtiva }).eq('id', id);
   if(error){ alert('Erro: '+error.message); return; }
   render();
 }
