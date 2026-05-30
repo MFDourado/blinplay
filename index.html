@@ -227,6 +227,18 @@
   .empty b{display:block;font-family:'Saira';font-size:16px;color:var(--txt);margin-bottom:6px}
   .mactions{display:flex;gap:6px;margin-top:9px}
   .mactions .mini{flex:1;text-align:center;padding:6px 4px;font-size:11px}
+  .prog-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+  .pl-list{padding:12px;display:flex;flex-direction:column;gap:9px;max-height:62vh;overflow-y:auto}
+  .pl-item{display:flex;align-items:center;gap:11px;background:#0c0c10;border:1px solid var(--line);border-radius:10px;padding:9px}
+  .pl-ord{width:22px;height:22px;flex-shrink:0;border-radius:6px;background:var(--gold-soft);color:var(--gold);font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center}
+  .pl-th{width:64px;height:38px;flex-shrink:0;border-radius:6px;overflow:hidden;background:#000}
+  .pl-meta{flex:1;min-width:0}
+  .pl-nm{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pl-sub{font-size:11px;color:var(--mut);margin-top:1px}
+  .pl-btns{display:flex;gap:4px;flex-shrink:0}
+  .pl-btns .mini{padding:5px 8px}
+  .mini[disabled]{opacity:.3;pointer-events:none}
+  @media(max-width:820px){.prog-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -312,6 +324,7 @@ const NAV = {
     {k:'estacoes', ic:'▤', label:'Estações & Canais'},
     {sec:'CONTEÚDO'},
     {k:'midia',    ic:'▣', label:'Biblioteca de Mídia'},
+    {k:'prog',     ic:'☰', label:'Programação dos Canais'},
     {k:'camp',     ic:'◷', label:'Campanhas & Agenda'},
     {sec:'GESTÃO'},
     {k:'contas',   ic:'⬡', label:'Contas & Usuários'},
@@ -325,6 +338,7 @@ const NAV = {
   ]
 };
 let ROLE='admin', CUR='overview';
+let PROG_CH = null;   // canal aberto no editor de programação
 
 function enter(role){ ROLE=role; CUR = role==='admin'?'overview':'cli_prog';
   document.getElementById('login').classList.add('hidden');
@@ -375,7 +389,7 @@ function buildNav(){
     if(item.sec){ const s=document.createElement('div');s.className='nav-sec';s.textContent=item.sec;el.appendChild(s);return;}
     const b=document.createElement('button'); b.className='nav'+(item.k===CUR?' active':'');
     b.innerHTML=`<span class="ic">${item.ic}</span> ${item.label}`;
-    b.onclick=()=>{CUR=item.k;buildNav();render();}; el.appendChild(b);
+    b.onclick=()=>{CUR=item.k;PROG_CH=null;buildNav();render();}; el.appendChild(b);
   });
 }
 
@@ -441,6 +455,22 @@ const VIEWS = {
     if(error) throw error;
     return topbar('Biblioteca de Mídia','Todas as contas · '+(meds?meds.length:0)+' item(ns)', `<button class="solid" onclick="novaMidia()">⬆ Subir mídia</button>`)
       + mediaPanelReal(meds, true);
+  },
+  async prog(){
+    // se um canal está selecionado, mostra o editor; senão, a lista de canais
+    if(PROG_CH) return await progEditor(PROG_CH);
+    const { data: chs, error } = await sb.from('channels')
+      .select('id,nome,account_id,accounts(nome)').eq('ativo',true).order('created_at');
+    if(error) throw error;
+    if(!chs || chs.length===0){
+      return topbar('Programação dos Canais','Escolha um canal para montar o que toca','')
+        +`<div class="panel"><div class="empty"><b>Nenhum canal ainda</b>Cadastre uma estação em “Estações & Canais” primeiro.</div></div>`;
+    }
+    const rows=chs.map(c=>`<tr class="row" style="cursor:pointer" onclick="abrirProg('${c.id}')">
+      <td><div class="est-name">${c.accounts?c.accounts.nome:'—'}</div><div class="est-sub">Canal: ${c.nome}</div></td>
+      <td style="text-align:right"><button class="mini">Montar programação →</button></td></tr>`).join('');
+    return topbar('Programação dos Canais','Escolha o canal para definir o que toca e em que ordem','')
+      +`<div class="panel"><table><tbody>${rows}</tbody></table></div>`;
   },
   camp(){ return topbar('Campanhas & Agenda','Sobe no período, sai sozinha quando a data passa', `<button class="solid">＋ Nova campanha</button>`) + campPanel(CAMP,true); },
   async contas(){
@@ -736,6 +766,110 @@ async function salvarEdicaoMidia(id, tipo){
   if(error){ msg.className='fmsg err'; msg.textContent='Erro: '+error.message; return; }
   msg.className='fmsg ok'; msg.textContent='Salvo!';
   setTimeout(()=>{ fecharModal(); render(); }, 400);
+}
+
+/* ---------------- PROGRAMAÇÃO DO CANAL (playlist) ---------------- */
+function abrirProg(id){ PROG_CH = id; render(); }
+function voltarProg(){ PROG_CH = null; render(); }
+
+async function progEditor(chId){
+  // dados do canal
+  const { data: ch } = await sb.from('channels').select('id,nome,account_id,accounts(nome)').eq('id',chId).single();
+  if(!ch){ PROG_CH=null; return '<div class="note">Canal não encontrado.</div>'; }
+
+  // mídias da conta + itens já na playlist
+  const [{ data: meds }, { data: items }] = await Promise.all([
+    sb.from('media').select('id,nome,tipo,storage_path,duracao_seg').eq('account_id',ch.account_id).order('created_at'),
+    sb.from('playlist_items').select('id,media_id,posicao').eq('channel_id',chId).eq('ativo',true).order('posicao')
+  ]);
+  const naPlaylist = new Set((items||[]).map(i=>i.media_id));
+  const medById = Object.fromEntries((meds||[]).map(m=>[m.id,m]));
+
+  // coluna esquerda: biblioteca da conta (disponíveis pra adicionar)
+  const disponiveis = (meds||[]).filter(m=>!naPlaylist.has(m.id));
+  const libCards = disponiveis.length ? disponiveis.map(m=>{
+    const url=SB_PUBLIC_BASE+m.storage_path; const isVid=m.tipo==='video';
+    const th = isVid?`<video src="${url}#t=0.5" muted preload="metadata" style="width:100%;height:100%;object-fit:cover"></video>`
+                    :`<img src="${url}" loading="lazy" style="width:100%;height:100%;object-fit:cover">`;
+    return `<div class="pl-item">
+      <div class="pl-th">${th}</div>
+      <div class="pl-meta"><div class="pl-nm">${m.nome}</div><div class="pl-sub">${isVid?'vídeo':m.duracao_seg+'s'}</div></div>
+      <button class="mini" onclick="addToProg('${chId}','${ch.account_id}','${m.id}')">＋ Incluir</button>
+    </div>`;
+  }).join('') : '<div class="empty" style="padding:30px"><b>Tudo já está no ar</b>Todas as mídias desta conta já estão na programação.</div>';
+
+  // coluna direita: playlist atual em ordem
+  const seq = (items||[]).map((it,i)=>{
+    const m=medById[it.media_id]; if(!m) return '';
+    const url=SB_PUBLIC_BASE+m.storage_path; const isVid=m.tipo==='video';
+    const th = isVid?`<video src="${url}#t=0.5" muted preload="metadata" style="width:100%;height:100%;object-fit:cover"></video>`
+                    :`<img src="${url}" loading="lazy" style="width:100%;height:100%;object-fit:cover">`;
+    return `<div class="pl-item">
+      <div class="pl-ord">${i+1}</div>
+      <div class="pl-th">${th}</div>
+      <div class="pl-meta"><div class="pl-nm">${m.nome}</div><div class="pl-sub">${isVid?'vídeo':m.duracao_seg+'s'}</div></div>
+      <div class="pl-btns">
+        <button class="mini" onclick="moveProg('${it.id}',-1)" ${i===0?'disabled':''}>↑</button>
+        <button class="mini" onclick="moveProg('${it.id}',1)" ${i===items.length-1?'disabled':''}>↓</button>
+        <button class="mini danger" onclick="removeFromProg('${it.id}')">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+  const seqHtml = (items&&items.length)?seq:'<div class="empty" style="padding:30px"><b>Programação vazia</b>Inclua mídias da biblioteca ao lado. Elas tocarão nesta ordem, em loop.</div>';
+
+  const addAll = disponiveis.length ? `<button class="ghost" onclick="addAllProg('${chId}','${ch.account_id}')">＋ Incluir todas</button>` : '';
+
+  return topbar('Programação · '+ (ch.accounts?ch.accounts.nome:'') +' / '+ch.nome,'O que toca neste canal, em ordem, em loop',
+      `<button class="ghost" onclick="voltarProg()">← Voltar aos canais</button>`)
+    + `<div class="prog-grid">
+        <div class="panel">
+          <div class="panel-h"><h3>Biblioteca da conta</h3>${addAll}</div>
+          <div class="pl-list">${libCards}</div>
+        </div>
+        <div class="panel">
+          <div class="panel-h"><h3>No ar neste canal</h3><span class="hint">ordem do carrossel</span></div>
+          <div class="pl-list">${seqHtml}</div>
+        </div>
+      </div>`;
+}
+
+async function addToProg(chId, accId, mediaId){
+  const { data: max } = await sb.from('playlist_items').select('posicao').eq('channel_id',chId).order('posicao',{ascending:false}).limit(1);
+  const pos = (max&&max[0]?max[0].posicao:0)+1;
+  const { error } = await sb.from('playlist_items').insert({ account_id:accId, channel_id:chId, media_id:mediaId, posicao:pos, ativo:true });
+  if(error){ alert('Erro: '+error.message); return; }
+  render();
+}
+async function addAllProg(chId, accId){
+  const { data: meds } = await sb.from('media').select('id').eq('account_id',accId).order('created_at');
+  const { data: items } = await sb.from('playlist_items').select('media_id').eq('channel_id',chId).eq('ativo',true);
+  const have=new Set((items||[]).map(i=>i.media_id));
+  const faltam=(meds||[]).filter(m=>!have.has(m.id));
+  if(faltam.length===0) return;
+  let pos=(items?items.length:0);
+  const rows=faltam.map(m=>({ account_id:accId, channel_id:chId, media_id:m.id, posicao:++pos, ativo:true }));
+  const { error } = await sb.from('playlist_items').insert(rows);
+  if(error){ alert('Erro: '+error.message); return; }
+  render();
+}
+async function removeFromProg(itemId){
+  const { error } = await sb.from('playlist_items').delete().eq('id',itemId);
+  if(error){ alert('Erro: '+error.message); return; }
+  render();
+}
+async function moveProg(itemId, dir){
+  // troca a posicao com o vizinho
+  const { data: cur } = await sb.from('playlist_items').select('id,channel_id,posicao').eq('id',itemId).single();
+  if(!cur) return;
+  const { data: viz } = await sb.from('playlist_items')
+    .select('id,posicao').eq('channel_id',cur.channel_id).eq('ativo',true)
+    [dir<0?'lt':'gt']('posicao',cur.posicao)
+    .order('posicao',{ascending:dir>0}).limit(1);
+  if(!viz||!viz[0]) return;
+  const a=cur.posicao, b=viz[0].posicao;
+  await sb.from('playlist_items').update({posicao:b}).eq('id',cur.id);
+  await sb.from('playlist_items').update({posicao:a}).eq('id',viz[0].id);
+  render();
 }
 
 async function novaMidia(){
