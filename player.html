@@ -49,7 +49,7 @@
 
 <script>
 /* ================= CONFIG ================= */
-const PLAYER_VERSION = 'v2.1';   // versão do player — aparece na coluna VERSÃO do painel
+const PLAYER_VERSION = 'v2.3';   // versão do player — aparece na coluna VERSÃO do painel
 const SB_URL = 'https://wjyaxmbkdjebulosdtds.supabase.co';
 const SB_KEY = 'sb_publishable_mmTZZoQCGe24bTshASUi1w_JKnyU4sv';
 const MEDIA_BASE = SB_URL + '/storage/v1/object/public/blinplay-media/';
@@ -280,36 +280,31 @@ function ligarRealtime(){
     .on('postgres_changes', { event:'*', schema:'public', table:'channels'            }, aoMudarCanal)
     .subscribe((status)=>{
       if(status==='SUBSCRIBED'){
-        // Realtime conectou de verdade: pode desligar a checagem rápida
+        // Realtime conectou: instantâneo, não precisa de auto-reload
         realtimeOK = true;
         if(resyncTimer){ clearInterval(resyncTimer); resyncTimer=null; }
       }
       if(status==='CLOSED' || status==='CHANNEL_ERROR' || status==='TIMED_OUT'){
-        // Realtime caiu/não conectou: garante a checagem rápida ligada e tenta religar
+        // Realtime não conectou (ex: rede do box bloqueia): liga auto-reload
         realtimeOK = false;
         ligarFallback();
         setTimeout(ligarRealtime, 10000);
       }
     });
+
+  // se em 8s o Realtime não confirmou, assume que está bloqueado e liga o auto-reload
+  setTimeout(()=>{ if(!realtimeOK) ligarFallback(); }, 8000);
 }
 
-// checagem rápida periódica — roda sempre que o Realtime NÃO está confirmado
+// AUTO-RELOAD: quando o Realtime não está ativo, recarrega a página inteira
+// a cada 15s. Isso garante que qualquer mudança no painel apareça no box,
+// mesmo em redes que bloqueiam conexão em tempo real.
 function ligarFallback(){
   if(resyncTimer) return;
-  resyncTimer = setInterval(async ()=>{
-    if(realtimeOK) return;
-    sincronizar(false);
-    // checa pedido de refresh remoto (já que o Realtime não está trazendo)
-    if(token){
-      try{
-        const { data } = await sb.rpc('checar_refresh', { p_token: token });
-        if(data){
-          const quando = new Date(data).getTime();
-          if(Date.now()-quando < RESYNC_FALLBACK_MS + 5000){ location.reload(); }
-        }
-      }catch(e){}
-    }
-  }, RESYNC_FALLBACK_MS);
+  resyncTimer = setInterval(()=>{
+    if(realtimeOK){ clearInterval(resyncTimer); resyncTimer=null; return; }
+    location.reload();
+  }, 15000);
 }
 
 /* ================= INÍCIO ================= */
