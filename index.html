@@ -564,6 +564,7 @@ const VIEWS = {
           <td><span class="stat ${on?'on':'off'}"><span class="dot ${on?'on':'off'}"></span>${on?'Online':'Offline'}</span></td>
           <td style="color:var(--mut)">${visto}</td>
           <td style="color:var(--mut)">${c.player_version||'—'}</td>
+          <td style="white-space:nowrap"><button class="mini" onclick="pedirRefresh('${c.id}','${(c.nome||'').replace(/'/g,"\\'")}')">⟳ Atualizar tela</button></td>
         </tr>`;
       }).join('');
     }
@@ -591,7 +592,7 @@ const VIEWS = {
       </div>
       <div class="note">⚡ <div><b>Acesso remoto à tela</b> (Fully Remote Admin / TeamViewer) é exclusivo deste painel. O cliente só recebe status e reboot.</div></div>
       <div class="panel"><div class="panel-h"><h3>Canais</h3><span class="hint">online = visto nos últimos 5 min</span></div>
-        <table><thead><tr><th>Hotel / Canal</th><th>Status</th><th>Último acesso</th><th>Versão</th></tr></thead><tbody>${chRows}</tbody></table></div>`
+        <table><thead><tr><th>Hotel / Canal</th><th>Status</th><th>Último acesso</th><th>Versão</th><th></th></tr></thead><tbody>${chRows}</tbody></table></div>`
     + campHtml;
   },
   async estacoes(){
@@ -806,7 +807,7 @@ const VIEWS = {
           <td><div class="est-name">${c.nome}</div></td>
           <td><span class="stat ${online?'on':'off'}"><span class="dot ${online?'on':'off'}"></span>${online?'Online':'Offline'}</span></td>
           <td style="color:var(--mut)">${visto}</td>
-          <td style="white-space:nowrap"><button class="mini danger" onclick="alert('Reboot remoto: liga no Fully no próximo passo')">⟳ Reboot</button></td>
+          <td style="white-space:nowrap"><button class="mini" onclick="pedirRefresh('${c.id}','${(c.nome||'').replace(/'/g,"\\'")}')">⟳ Atualizar tela</button></td>
         </tr>`;
       }).join('');
     }
@@ -1379,6 +1380,13 @@ async function togglePausaCampanha(id, estaAtiva){
   const { error } = await sb.from('campaigns').update({ ativo: !estaAtiva }).eq('id', id);
   if(error){ alert('Erro: '+error.message); return; }
   render();
+}
+
+async function pedirRefresh(channelId, nomeCanal){
+  if(!confirm('Atualizar a tela do canal "'+nomeCanal+'" agora?\n\nA TV vai recarregar o conteúdo em alguns segundos.')) return;
+  const { error } = await sb.rpc('pedir_refresh', { p_channel: channelId });
+  if(error){ alert('Erro: '+error.message); return; }
+  alert('Comando enviado! Se o box estiver online, a tela recarrega em instantes.');
 }
 
 async function novaMidia(){
