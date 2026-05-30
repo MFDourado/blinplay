@@ -238,6 +238,11 @@
   .pl-btns{display:flex;gap:4px;flex-shrink:0}
   .pl-btns .mini{padding:5px 8px}
   .mini[disabled]{opacity:.3;pointer-events:none}
+  .checkbox-grid{display:flex;flex-direction:column;gap:7px;max-height:160px;overflow-y:auto;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);padding:11px}
+  .chk{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--txt);cursor:pointer}
+  .chk input{width:auto;accent-color:var(--gold)}
+  .chk-t{font-size:10.5px;color:var(--mut);background:var(--surf2);padding:1px 7px;border-radius:5px;margin-left:auto}
+  .chk-empty{font-size:12px;color:var(--mut)}
   @media(max-width:820px){.prog-grid{grid-template-columns:1fr}}
 </style>
 </head>
@@ -472,7 +477,37 @@ const VIEWS = {
     return topbar('Programação dos Canais','Escolha o canal para definir o que toca e em que ordem','')
       +`<div class="panel"><table><tbody>${rows}</tbody></table></div>`;
   },
-  camp(){ return topbar('Campanhas & Agenda','Sobe no período, sai sozinha quando a data passa', `<button class="solid">＋ Nova campanha</button>`) + campPanel(CAMP,true); },
+  async camp(){
+    const hoje = new Date().toISOString().slice(0,10);
+    const { data: camps, error } = await sb.from('campaigns')
+      .select('id,nome,data_inicio,data_fim,frequencia_a_cada,ativo,account_id,accounts(nome)')
+      .order('data_inicio',{ascending:false});
+    if(error) throw error;
+    let rows;
+    if(!camps || camps.length===0){
+      rows = `<div class="empty"><b>Nenhuma campanha ainda</b>Crie uma campanha temporária (ex: Dia das Mães) que sobe e sai sozinha por data.</div>`;
+    } else {
+      rows = camps.map(c=>{
+        let st, badge;
+        if(!c.ativo){ st='Pausada'; badge='done'; }
+        else if(hoje < c.data_inicio){ st='Agendada'; badge='sched'; }
+        else if(hoje > c.data_fim){ st='Encerrada'; badge='done'; }
+        else { st='No ar'; badge='live'; }
+        const di=c.data_inicio.split('-').reverse().join('/');
+        const df=c.data_fim.split('-').reverse().join('/');
+        return `<div class="camp">
+          <div class="camp-ic" style="background:rgba(245,168,0,.18);border:1px solid rgba(245,168,0,.4)">◷</div>
+          <div class="camp-main"><div class="cn">${c.nome}</div><div class="cd">${di} → ${df} · ${c.accounts?c.accounts.nome:''}</div></div>
+          <span class="freq">1 a cada ${c.frequencia_a_cada}</span>
+          <span class="badge ${badge}">${badge==='live'?'● ':''}${st}</span>
+          <button class="mini" onclick="editarCampanha('${c.id}')">Editar</button>
+          <button class="mini danger" onclick="excluirCampanha('${c.id}','${(c.nome||'').replace(/'/g,"\\'")}')">Excluir</button>
+        </div>`;
+      }).join('');
+    }
+    return topbar('Campanhas & Agenda','Entra no rodízio no período, sai sozinha quando a data passa', `<button class="solid" onclick="novaCampanha()">＋ Nova campanha</button>`)
+      + `<div class="panel"><div class="panel-h"><h3>Campanhas</h3><span class="hint">rodízio: padrão · padrão · campanha · padrão…</span></div>${rows}</div>`;
+  },
   async contas(){
     const { data: accs, error } = await sb.from('accounts')
       .select('id,cnpj,nome,ativo,plano').order('created_at',{ascending:true});
@@ -869,6 +904,122 @@ async function moveProg(itemId, dir){
   const a=cur.posicao, b=viz[0].posicao;
   await sb.from('playlist_items').update({posicao:b}).eq('id',cur.id);
   await sb.from('playlist_items').update({posicao:a}).eq('id',viz[0].id);
+  render();
+}
+
+/* ---------------- CAMPANHAS ---------------- */
+async function novaCampanha(){
+  const { data: accs } = await sb.from('accounts').select('id,nome').eq('ativo',true).order('nome');
+  if(!accs || accs.length===0){ alert('Cadastre uma conta antes de criar campanha.'); return; }
+  const opts=accs.map(a=>`<option value="${a.id}">${a.nome}</option>`).join('');
+  const hoje=new Date().toISOString().slice(0,10);
+  abrirModal(`
+    <h3>Nova campanha</h3>
+    <div class="fsub">Conteúdo temporário que entra no rodízio e sai sozinho na data final.</div>
+    <div class="fld"><label>Conta (hotel)</label><select id="cp_acc" onchange="carregarMidiasCanais()">${opts}</select></div>
+    <div class="fld"><label>Nome da campanha</label><input id="cp_nome" placeholder="Ex: Dia das Mães 2026"></div>
+    <div style="display:flex;gap:10px">
+      <div class="fld" style="flex:1"><label>Início</label><input id="cp_ini" type="date" value="${hoje}"></div>
+      <div class="fld" style="flex:1"><label>Fim</label><input id="cp_fim" type="date" value="${hoje}"></div>
+    </div>
+    <div class="fld"><label>Frequência — 1 campanha a cada quantos itens</label><input id="cp_freq" type="number" value="4" min="1" max="20"></div>
+    <div class="fld"><label>Mídias da campanha (marque uma ou mais)</label><div id="cp_midias" class="checkbox-grid">Escolha a conta…</div></div>
+    <div class="fld"><label>Toca em quais canais</label><div id="cp_canais" class="checkbox-grid">Escolha a conta…</div></div>
+    <div id="cp_msg" class="fmsg"></div>
+    <div class="form-actions">
+      <button class="fa-cancel" onclick="fecharModal()">Cancelar</button>
+      <button class="fa-save" onclick="salvarCampanha()">Criar campanha</button>
+    </div>`);
+  carregarMidiasCanais();
+}
+
+async function carregarMidiasCanais(preMidias, preCanais){
+  const accId=val('cp_acc');
+  const [{ data: meds }, { data: chs }] = await Promise.all([
+    sb.from('media').select('id,nome,tipo').eq('account_id',accId).order('created_at'),
+    sb.from('channels').select('id,nome').eq('account_id',accId).eq('ativo',true).order('created_at')
+  ]);
+  const mBox=document.getElementById('cp_midias');
+  const cBox=document.getElementById('cp_canais');
+  const pm=new Set(preMidias||[]), pc=new Set(preCanais||[]);
+  mBox.innerHTML = (meds&&meds.length) ? meds.map(m=>
+    `<label class="chk"><input type="checkbox" class="cp_m" value="${m.id}" ${pm.has(m.id)?'checked':''}> ${m.nome} <span class="chk-t">${m.tipo==='video'?'vídeo':'imagem'}</span></label>`
+  ).join('') : '<span class="chk-empty">Esta conta não tem mídia. Suba antes na Biblioteca.</span>';
+  cBox.innerHTML = (chs&&chs.length) ? chs.map(c=>
+    `<label class="chk"><input type="checkbox" class="cp_c" value="${c.id}" ${pc.has(c.id)?'checked':''}> ${c.nome}</label>`
+  ).join('') : '<span class="chk-empty">Esta conta não tem canais. Crie em Estações.</span>';
+}
+
+async function salvarCampanha(editId){
+  const account_id=val('cp_acc'), nome=val('cp_nome');
+  const data_inicio=val('cp_ini'), data_fim=val('cp_fim');
+  const frequencia_a_cada=parseInt(val('cp_freq')||'4',10);
+  const midias=[...document.querySelectorAll('.cp_m:checked')].map(x=>x.value);
+  const canais=[...document.querySelectorAll('.cp_c:checked')].map(x=>x.value);
+  const msg=document.getElementById('cp_msg');
+  if(!nome){ msg.className='fmsg err'; msg.textContent='Dê um nome à campanha.'; return; }
+  if(data_fim < data_inicio){ msg.className='fmsg err'; msg.textContent='A data final não pode ser antes da inicial.'; return; }
+  if(midias.length===0){ msg.className='fmsg err'; msg.textContent='Escolha ao menos uma mídia.'; return; }
+  if(canais.length===0){ msg.className='fmsg err'; msg.textContent='Escolha ao menos um canal.'; return; }
+  msg.className='fmsg'; msg.textContent='Salvando…';
+  try{
+    let campId=editId;
+    if(editId){
+      const { error } = await sb.from('campaigns').update({ nome, data_inicio, data_fim, frequencia_a_cada }).eq('id',editId);
+      if(error) throw error;
+      // limpa itens e canais antigos pra regravar
+      await sb.from('campaign_items').delete().eq('campaign_id',editId);
+      await sb.from('campaign_channels').delete().eq('campaign_id',editId);
+    } else {
+      const { data, error } = await sb.from('campaigns')
+        .insert({ account_id, nome, data_inicio, data_fim, frequencia_a_cada, ativo:true })
+        .select('id').single();
+      if(error) throw error;
+      campId=data.id;
+    }
+    // grava mídias e canais
+    const itens=midias.map((mid,i)=>({ account_id, campaign_id:campId, media_id:mid, posicao:i }));
+    const cans=canais.map(cid=>({ campaign_id:campId, channel_id:cid, account_id }));
+    const r1=await sb.from('campaign_items').insert(itens);   if(r1.error) throw r1.error;
+    const r2=await sb.from('campaign_channels').insert(cans);  if(r2.error) throw r2.error;
+    msg.className='fmsg ok'; msg.textContent='Campanha salva!';
+    setTimeout(()=>{ fecharModal(); render(); }, 500);
+  }catch(ex){ msg.className='fmsg err'; msg.textContent='Erro: '+(ex.message||ex); }
+}
+
+async function editarCampanha(id){
+  const { data: c } = await sb.from('campaigns').select('*').eq('id',id).single();
+  if(!c){ alert('Campanha não encontrada.'); return; }
+  const [{ data: its }, { data: chs }] = await Promise.all([
+    sb.from('campaign_items').select('media_id').eq('campaign_id',id),
+    sb.from('campaign_channels').select('channel_id').eq('campaign_id',id)
+  ]);
+  const { data: accs } = await sb.from('accounts').select('id,nome').eq('ativo',true).order('nome');
+  const opts=accs.map(a=>`<option value="${a.id}" ${a.id===c.account_id?'selected':''}>${a.nome}</option>`).join('');
+  abrirModal(`
+    <h3>Editar campanha</h3>
+    <div class="fsub">Conta fixa. Ajuste datas, frequência, mídias e canais.</div>
+    <div class="fld"><label>Conta (hotel)</label><select id="cp_acc" disabled>${opts}</select></div>
+    <div class="fld"><label>Nome da campanha</label><input id="cp_nome" value="${(c.nome||'').replace(/"/g,'&quot;')}"></div>
+    <div style="display:flex;gap:10px">
+      <div class="fld" style="flex:1"><label>Início</label><input id="cp_ini" type="date" value="${c.data_inicio}"></div>
+      <div class="fld" style="flex:1"><label>Fim</label><input id="cp_fim" type="date" value="${c.data_fim}"></div>
+    </div>
+    <div class="fld"><label>Frequência — 1 campanha a cada quantos itens</label><input id="cp_freq" type="number" value="${c.frequencia_a_cada}" min="1" max="20"></div>
+    <div class="fld"><label>Mídias da campanha</label><div id="cp_midias" class="checkbox-grid">…</div></div>
+    <div class="fld"><label>Toca em quais canais</label><div id="cp_canais" class="checkbox-grid">…</div></div>
+    <div id="cp_msg" class="fmsg"></div>
+    <div class="form-actions">
+      <button class="fa-cancel" onclick="fecharModal()">Cancelar</button>
+      <button class="fa-save" onclick="salvarCampanha('${id}')">Salvar alterações</button>
+    </div>`);
+  carregarMidiasCanais((its||[]).map(x=>x.media_id), (chs||[]).map(x=>x.channel_id));
+}
+
+async function excluirCampanha(id, nome){
+  if(!confirm('Excluir a campanha "'+nome+'"?\n\nEla sai do ar imediatamente. Não dá pra desfazer.')) return;
+  const { error } = await sb.from('campaigns').delete().eq('id',id);
+  if(error){ alert('Erro: '+error.message); return; }
   render();
 }
 
