@@ -179,21 +179,43 @@ async function sincronizar(primeira){
       showMsg('Token inválido ou canal inativo.<br>Verifique a URL configurada no box.', false);
       return;
     }
-    const nova = montarPlaylist(data);
-    const sig = assinatura(nova);
-    if(sig !== lastSig){
-      // a programação mudou: aplica
-      lastSig = sig;
-      playlist = nova;
-      if(primeira || idx >= playlist.length) idx = 0;
-      tocar();
-    }
+    // guarda a última programação boa (pra abrir offline na próxima vez)
+    try{ localStorage.setItem('blinplay_sched_'+token, JSON.stringify(data)); }catch(e){}
+    aplicarPrograma(data, primeira);
+    precarregarMidias(data);   // manda o cache baixar tudo em background
   }catch(ex){
-    // se já tem algo tocando, mantém tocando (resiliência); senão mostra erro
+    // sem rede: se não há nada tocando, tenta a última programação salva
     if(playlist.length===0){
-      showMsg('Sem conexão com o servidor.<br>Tentando novamente…', true);
+      let salvo=null;
+      try{ salvo=JSON.parse(localStorage.getItem('blinplay_sched_'+token)); }catch(e){}
+      if(salvo){ aplicarPrograma(salvo, true); }
+      else showMsg('Sem conexão com o servidor.<br>Tentando novamente…', true);
     }
+    // se já está tocando, mantém tocando (resiliência total)
   }
+}
+
+function aplicarPrograma(data, primeira){
+  const nova = montarPlaylist(data);
+  const sig = assinatura(nova);
+  if(sig !== lastSig){
+    lastSig = sig;
+    playlist = nova;
+    if(primeira || idx >= playlist.length) idx = 0;
+    tocar();
+  }
+}
+
+// pede ao navegador pra baixar todas as mídias da playlist agora (vão pro cache do SW)
+function precarregarMidias(data){
+  const todas = [];
+  (data.padrao||[]).forEach(m=> todas.push(m.path));
+  (data.campanhas||[]).forEach(c=> (c.itens||[]).forEach(it=> todas.push(it.path)));
+  todas.forEach(path=>{
+    const url = MEDIA_BASE + path;
+    // fetch silencioso: o Service Worker intercepta e guarda no cache
+    fetch(url, { mode:'no-cors' }).catch(()=>{});
+  });
 }
 
 /* ================= INÍCIO ================= */
@@ -208,6 +230,12 @@ function init(){
 
   sb = window.supabase.createClient(SB_URL, SB_KEY);
   showMsg('Carregando programação…', true);
+
+  // registra o Service Worker (cache offline das mídias)
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  }
+
   sincronizar(true);
 
   // re-sincroniza periodicamente (pega campanhas que entram/saem e mudanças de conteúdo)
