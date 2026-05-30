@@ -344,6 +344,7 @@ const NAV = {
     {sec:'MEU CANAL'},
     {k:'cli_prog', ic:'▦', label:'Minha Programação'},
     {k:'cli_midia',ic:'▣', label:'Minha Mídia'},
+    {k:'prog',     ic:'☰', label:'Montar Programação'},
     {k:'cli_camp', ic:'◷', label:'Minhas Campanhas'},
     {k:'cli_canais',ic:'▤',label:'Meus Canais'},
   ]
@@ -519,17 +520,18 @@ const VIEWS = {
   async prog(){
     // se um canal está selecionado, mostra o editor; senão, a lista de canais
     if(PROG_CH) return await progEditor(PROG_CH);
-    const { data: chs, error } = await sb.from('channels')
-      .select('id,nome,account_id,accounts(nome)').eq('ativo',true).order('created_at');
+    let q = sb.from('channels').select('id,nome,account_id,accounts(nome)').eq('ativo',true);
+    if(ROLE==='cli' && CLI_ACC) q = q.eq('account_id', CLI_ACC.id);   // cliente: só os canais dele
+    const { data: chs, error } = await q.order('created_at');
     if(error) throw error;
     if(!chs || chs.length===0){
-      return topbar('Programação dos Canais','Escolha um canal para montar o que toca','')
-        +`<div class="panel"><div class="empty"><b>Nenhum canal ainda</b>Cadastre uma estação em “Estações & Canais” primeiro.</div></div>`;
+      return topbar('Montar Programação','Escolha um canal para montar o que toca','')
+        +`<div class="panel"><div class="empty"><b>Nenhum canal ainda</b>${ROLE==='cli'?'A Blincast instala e configura seus canais.':'Cadastre uma estação em “Estações & Canais” primeiro.'}</div></div>`;
     }
     const rows=chs.map(c=>`<tr class="row" style="cursor:pointer" onclick="abrirProg('${c.id}')">
       <td><div class="est-name">${c.accounts?c.accounts.nome:'—'}</div><div class="est-sub">Canal: ${c.nome}</div></td>
       <td style="text-align:right"><button class="mini">Montar programação →</button></td></tr>`).join('');
-    return topbar('Programação dos Canais','Escolha o canal para definir o que toca e em que ordem','')
+    return topbar('Montar Programação','Escolha o canal para definir o que toca e em que ordem','')
       +`<div class="panel"><table><tbody>${rows}</tbody></table></div>`;
   },
   async camp(){
@@ -588,24 +590,89 @@ const VIEWS = {
   },
 
   /* ===== CLIENTE ===== */
-  cli_prog(){
-    return topbar('Minha Programação','Porto Bay RJ · o que está no ar agora', playerBtn())
+  async cli_prog(){
+    if(!CLI_ACC) return '<div class="note">Sessão sem hotel selecionado.</div>';
+    const acc=CLI_ACC.id;
+    const [{data:chs},{data:meds},{data:camps}] = await Promise.all([
+      sb.from('channels').select('id,nome,last_seen_at').eq('account_id',acc).eq('ativo',true),
+      sb.from('media').select('id').eq('account_id',acc),
+      sb.from('campaigns').select('id,ativo,data_inicio,data_fim').eq('account_id',acc)
+    ]);
+    const hoje=new Date().toISOString().slice(0,10);
+    const online=(chs||[]).filter(c=>c.last_seen_at && (Date.now()-new Date(c.last_seen_at).getTime()<5*60*1000)).length;
+    const ativas=(camps||[]).filter(c=>c.ativo && hoje>=c.data_inicio && hoje<=c.data_fim).length;
+    return topbar('Minha Programação', CLI_ACC.nome+' · visão geral', playerBtn())
     +`<div class="kpis">
-        <div class="kpi"><div class="lab">Meus canais</div><div class="val">2</div></div>
-        <div class="kpi"><div class="lab">Online</div><div class="val" style="color:var(--on)">2<small>/2</small></div></div>
-        <div class="kpi"><div class="lab">Mídias</div><div class="val">${MEDIA.length}</div></div>
-        <div class="kpi"><div class="lab">Campanha ativa</div><div class="val" style="color:var(--gold)">1</div></div>
-      </div>`
-    + campPanel(CAMP.filter(c=>c.hotel.includes('Porto')))
-    + mediaPanel(MEDIA.slice(0,4),'Tocando agora · canal Quartos');
+        <div class="kpi"><div class="lab">Meus canais</div><div class="val">${(chs||[]).length}</div></div>
+        <div class="kpi"><div class="lab">Online</div><div class="val" style="color:var(--on)">${online}<small>/${(chs||[]).length}</small></div></div>
+        <div class="kpi"><div class="lab">Mídias</div><div class="val">${(meds||[]).length}</div></div>
+        <div class="kpi"><div class="lab">Campanhas no ar</div><div class="val" style="color:var(--gold)">${ativas}</div></div>
+      </div>
+      <div class="note">💡 <div>Use <b>Minha Mídia</b> para enviar conteúdo, <b>Programação</b> para montar o que toca e <b>Campanhas</b> para conteúdo temporário com data.</div></div>`;
   },
-  cli_midia(){ return topbar('Minha Mídia','Suas imagens e vídeos · '+MEDIA.length+' itens', `<button class="solid">⬆ Subir mídia</button>`) + mediaPanel(MEDIA); },
-  cli_camp(){ return topbar('Minhas Campanhas','Você define data e frequência', `<button class="solid">＋ Nova campanha</button>`)
-    +`<div class="note">💡 <div>Suas campanhas entram no rodízio junto com o conteúdo padrão e <b>somem sozinhas</b> quando a data final passa. A Blincast supervisiona, mas você opera.</div></div>`
-    + campPanel(CAMP.filter(c=>c.hotel.includes('Porto')),true); },
-  cli_canais(){
-    return topbar('Meus Canais','Status e reboot dos seus boxes','')
-    + estacoesTable(false, ESTACOES.filter(e=>e.hotel.includes('Porto')));
+  async cli_midia(){
+    if(!CLI_ACC) return '';
+    const { data: meds, error } = await sb.from('media')
+      .select('id,nome,tipo,storage_path,duracao_seg,tamanho_bytes').eq('account_id',CLI_ACC.id).order('created_at',{ascending:false});
+    if(error) throw error;
+    return topbar('Minha Mídia', CLI_ACC.nome+' · '+(meds?meds.length:0)+' item(ns)', `<button class="solid" onclick="novaMidia()">⬆ Subir mídia</button>`)
+      + mediaPanelReal(meds, false);
+  },
+  async cli_prog_canais(){ return await this.cli_canais(); },
+  async cli_camp(){
+    if(!CLI_ACC) return '';
+    const hoje=new Date().toISOString().slice(0,10);
+    const { data: camps, error } = await sb.from('campaigns')
+      .select('id,nome,data_inicio,data_fim,frequencia_a_cada,ativo').eq('account_id',CLI_ACC.id).order('data_inicio',{ascending:false});
+    if(error) throw error;
+    let rows;
+    if(!camps||camps.length===0){
+      rows=`<div class="empty"><b>Nenhuma campanha ainda</b>Crie conteúdo temporário que sobe e sai sozinho por data.</div>`;
+    } else {
+      rows=camps.map(c=>{
+        let st,badge;
+        if(!c.ativo){st='Pausada';badge='paused';}
+        else if(hoje<c.data_inicio){st='Agendada';badge='sched';}
+        else if(hoje>c.data_fim){st='Encerrada';badge='done';}
+        else{st='No ar';badge='live';}
+        const di=c.data_inicio.split('-').reverse().join('/'), df=c.data_fim.split('-').reverse().join('/');
+        return `<div class="camp">
+          <div class="camp-ic" style="background:rgba(245,168,0,.18);border:1px solid rgba(245,168,0,.4)">◷</div>
+          <div class="camp-main"><div class="cn">${c.nome}</div><div class="cd">${di} → ${df}</div></div>
+          <span class="freq">1 a cada ${c.frequencia_a_cada}</span>
+          <span class="badge ${badge}">${badge==='live'?'● ':''}${st}</span>
+          <button class="mini" onclick="togglePausaCampanha('${c.id}',${c.ativo})">${c.ativo?'⏸ Pausar':'▶ Retomar'}</button>
+          <button class="mini" onclick="editarCampanha('${c.id}')">Editar</button>
+          <button class="mini danger" onclick="excluirCampanha('${c.id}','${(c.nome||'').replace(/'/g,"\\'")}')">Excluir</button>
+        </div>`;
+      }).join('');
+    }
+    return topbar('Minhas Campanhas','Você define mídias, datas e frequência. Some sozinha quando a data passa.', `<button class="solid" onclick="novaCampanha()">＋ Nova campanha</button>`)
+      +`<div class="panel"><div class="panel-h"><h3>Campanhas</h3><span class="hint">${CLI_ACC.nome}</span></div>${rows}</div>`;
+  },
+  async cli_canais(){
+    if(!CLI_ACC) return '';
+    const { data: chs, error } = await sb.from('channels')
+      .select('id,nome,device_token,last_seen_at,player_version').eq('account_id',CLI_ACC.id).eq('ativo',true).order('created_at');
+    if(error) throw error;
+    let rows;
+    if(!chs||chs.length===0){
+      rows='<tr><td colspan="4"><div class="empty"><b>Nenhum canal</b>A Blincast instala e configura seus canais.</div></td></tr>';
+    } else {
+      rows=chs.map(c=>{
+        const online=c.last_seen_at && (Date.now()-new Date(c.last_seen_at).getTime()<5*60*1000);
+        const visto=c.last_seen_at?tempoRel(c.last_seen_at):'nunca';
+        return `<tr class="row">
+          <td><div class="est-name">${c.nome}</div></td>
+          <td><span class="stat ${online?'on':'off'}"><span class="dot ${online?'on':'off'}"></span>${online?'Online':'Offline'}</span></td>
+          <td style="color:var(--mut)">${visto}</td>
+          <td style="white-space:nowrap"><button class="mini danger" onclick="alert('Reboot remoto: liga no Fully no próximo passo')">⟳ Reboot</button></td>
+        </tr>`;
+      }).join('');
+    }
+    return topbar('Meus Canais', CLI_ACC.nome+' · status dos boxes','')
+      +`<div class="panel"><div class="panel-h"><h3>Canais</h3><span class="hint">online = visto nos últimos 5 min</span></div>
+        <table><thead><tr><th>Canal</th><th>Status</th><th>Último acesso</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
   },
 };
 
@@ -965,22 +1032,28 @@ async function moveProg(itemId, dir){
 
 /* ---------------- CAMPANHAS ---------------- */
 async function novaCampanha(){
-  const { data: accs } = await sb.from('accounts').select('id,nome').eq('ativo',true).order('nome');
-  if(!accs || accs.length===0){ alert('Cadastre uma conta antes de criar campanha.'); return; }
-  const opts=accs.map(a=>`<option value="${a.id}">${a.nome}</option>`).join('');
+  let accField;
+  if(ROLE==='cli' && CLI_ACC){
+    accField = `<input type="hidden" id="cp_acc" value="${CLI_ACC.id}">`;
+  } else {
+    const { data: accs } = await sb.from('accounts').select('id,nome').eq('ativo',true).order('nome');
+    if(!accs || accs.length===0){ alert('Cadastre uma conta antes de criar campanha.'); return; }
+    const opts=accs.map(a=>`<option value="${a.id}">${a.nome}</option>`).join('');
+    accField = `<div class="fld"><label>Conta (hotel)</label><select id="cp_acc" onchange="carregarMidiasCanais()">${opts}</select></div>`;
+  }
   const hoje=new Date().toISOString().slice(0,10);
   abrirModal(`
     <h3>Nova campanha</h3>
     <div class="fsub">Conteúdo temporário que entra no rodízio e sai sozinho na data final.</div>
-    <div class="fld"><label>Conta (hotel)</label><select id="cp_acc" onchange="carregarMidiasCanais()">${opts}</select></div>
+    ${accField}
     <div class="fld"><label>Nome da campanha</label><input id="cp_nome" placeholder="Ex: Dia das Mães 2026"></div>
     <div style="display:flex;gap:10px">
       <div class="fld" style="flex:1"><label>Início</label><input id="cp_ini" type="date" value="${hoje}"></div>
       <div class="fld" style="flex:1"><label>Fim</label><input id="cp_fim" type="date" value="${hoje}"></div>
     </div>
     <div class="fld"><label>Frequência da campanha no rodízio</label><input id="cp_freq" type="number" value="4" min="1" max="20"><div style="font-size:11px;color:var(--mut);margin-top:5px">Quanto menor o número, mais a campanha aparece. Ela sempre entra ao menos 1x por volta.</div></div>
-    <div class="fld"><label>Mídias da campanha (marque uma ou mais)</label><div id="cp_midias" class="checkbox-grid">Escolha a conta…</div></div>
-    <div class="fld"><label>Toca em quais canais</label><div id="cp_canais" class="checkbox-grid">Escolha a conta…</div></div>
+    <div class="fld"><label>Mídias da campanha (marque uma ou mais)</label><div id="cp_midias" class="checkbox-grid">Carregando…</div></div>
+    <div class="fld"><label>Toca em quais canais</label><div id="cp_canais" class="checkbox-grid">Carregando…</div></div>
     <div id="cp_msg" class="fmsg"></div>
     <div class="form-actions">
       <button class="fa-cancel" onclick="fecharModal()">Cancelar</button>
@@ -1086,14 +1159,20 @@ async function togglePausaCampanha(id, estaAtiva){
 }
 
 async function novaMidia(){
-  // admin precisa escolher a conta dona da mídia
-  const { data: accs } = await sb.from('accounts').select('id,nome').eq('ativo',true).order('nome');
-  if(!accs || accs.length===0){ alert('Cadastre uma conta (hotel) antes de subir mídia.'); return; }
-  const opts=accs.map(a=>`<option value="${a.id}">${a.nome}</option>`).join('');
+  let accSelect;
+  if(ROLE==='cli' && CLI_ACC){
+    // cliente: conta fixa, sem seletor
+    accSelect = `<input type="hidden" id="nm_acc" value="${CLI_ACC.id}">`;
+  } else {
+    const { data: accs } = await sb.from('accounts').select('id,nome').eq('ativo',true).order('nome');
+    if(!accs || accs.length===0){ alert('Cadastre uma conta (hotel) antes de subir mídia.'); return; }
+    const opts=accs.map(a=>`<option value="${a.id}">${a.nome}</option>`).join('');
+    accSelect = `<div class="fld"><label>Conta (hotel)</label><select id="nm_acc">${opts}</select></div>`;
+  }
   abrirModal(`
     <h3>Subir mídia</h3>
     <div class="fsub">Imagem (JPG, PNG, WebP) ou vídeo (MP4), até 50 MB.</div>
-    <div class="fld"><label>Conta (hotel)</label><select id="nm_acc">${opts}</select></div>
+    ${accSelect}
     <div class="fld"><label>Arquivo</label><input id="nm_file" type="file" accept="image/jpeg,image/png,image/webp,video/mp4" onchange="previewMidia(this)"></div>
     <div class="fld"><label>Nome / título</label><input id="nm_nome" placeholder="Ex: Café da manhã"></div>
     <div class="fld" id="nm_dur_wrap"><label>Tempo na tela (segundos) — só imagem</label><input id="nm_dur" type="number" value="8" min="3" max="60"></div>
