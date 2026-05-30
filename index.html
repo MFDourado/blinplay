@@ -207,6 +207,24 @@
   .login-msg{margin-top:14px;font-size:12.5px;text-align:center;padding:10px;border-radius:var(--rs);line-height:1.4}
   .login-msg.err{background:rgba(244,96,107,.1);border:1px solid rgba(244,96,107,.3);color:#ffb3ba}
   .login-msg.ok{background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.3);color:#9af0cf}
+
+  .loading{color:var(--mut);padding:40px;text-align:center;font-size:14px}
+  .form-modal{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1500;display:flex;align-items:center;justify-content:center;padding:20px}
+  .form-box{background:linear-gradient(180deg,var(--surf),var(--bg2));border:1px solid var(--line2);border-radius:16px;padding:26px;width:100%;max-width:440px;box-shadow:0 40px 80px -30px rgba(0,0,0,.8)}
+  .form-box h3{font-size:18px;margin-bottom:4px}
+  .form-box .fsub{color:var(--mut);font-size:12.5px;margin-bottom:18px}
+  .form-box .fld{margin-bottom:13px}
+  .form-box label{display:block;font-size:11.5px;color:var(--mut);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em}
+  .form-box input,.form-box select{width:100%;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);padding:11px 12px;color:var(--txt);font-size:14px;outline:none;font-family:inherit}
+  .form-box input:focus{border-color:var(--gold)}
+  .form-actions{display:flex;gap:10px;margin-top:20px}
+  .form-actions button{flex:1;border-radius:var(--rs);padding:11px;font-weight:700;font-size:13.5px;border:0}
+  .fa-cancel{background:var(--surf2);border:1px solid var(--line)!important;color:var(--txt)}
+  .fa-save{background:linear-gradient(180deg,var(--gold),var(--gold-d));color:#1a1300}
+  .fmsg{font-size:12px;margin-top:10px;text-align:center}
+  .fmsg.err{color:#ffb3ba}.fmsg.ok{color:#9af0cf}
+  .empty{text-align:center;padding:50px 20px;color:var(--mut)}
+  .empty b{display:block;font-family:'Saira';font-size:16px;color:var(--txt);margin-bottom:6px}
 </style>
 </head>
 <body>
@@ -360,7 +378,13 @@ function buildNav(){
 }
 
 /* ---------------- VIEWS ---------------- */
-function render(){ document.getElementById('view').innerHTML = (VIEWS[CUR]||(()=>'<p>—</p>'))(); }
+async function render(){
+  const view=document.getElementById('view');
+  const fn=VIEWS[CUR]||(()=>'<p>—</p>');
+  view.innerHTML='<div class="loading">Carregando…</div>';
+  try{ view.innerHTML = await fn(); }
+  catch(e){ view.innerHTML='<div class="note" style="background:rgba(244,96,107,.1);border-color:rgba(244,96,107,.3);color:#ffb3ba">Erro ao carregar: '+(e.message||e)+'</div>'; }
+}
 
 function topbar(title,sub,actions=''){return `<div class="top"><div><h1>${title}</h1><div class="sub">${sub}</div></div><div class="top-actions">${actions}</div></div>`;}
 function playerBtn(){return `<button class="ghost" onclick="openPlayer()">▷ Ver player ao vivo</button>`;}
@@ -380,23 +404,57 @@ const VIEWS = {
     + estacoesTable(true)
     + campPanel(CAMP);
   },
-  estacoes(){
-    return topbar('Estações & Canais','Cada box ZTE = um canal. URL única por estação.', `<button class="solid">＋ Nova estação</button>`)
-    + estacoesTable(true);
+  async estacoes(){
+    const { data: chs, error } = await sb.from('channels')
+      .select('id,nome,descricao,device_token,ativo,last_seen_at,player_version,account_id,accounts(nome,cnpj)')
+      .order('created_at',{ascending:true});
+    if(error) throw error;
+    let rows;
+    if(!chs || chs.length===0){
+      rows='<tr><td colspan="5"><div class="empty"><b>Nenhuma estação ainda</b>Cadastre uma conta primeiro, depois adicione os canais (boxes) dela.</div></td></tr>';
+    } else {
+      rows=chs.map(c=>{
+        const online = c.last_seen_at && (Date.now()-new Date(c.last_seen_at).getTime() < 5*60*1000);
+        const visto = c.last_seen_at ? tempoRel(c.last_seen_at) : 'nunca';
+        const url = location.origin+location.pathname.replace(/index\.html$/,'')+'player.html?token='+c.device_token;
+        return `<tr class="row">
+          <td><div class="est-name">${c.accounts?c.accounts.nome:'—'}</div><div class="est-sub">Canal: ${c.nome}</div></td>
+          <td><span class="stat ${online?'on':'off'}"><span class="dot ${online?'on':'off'}"></span>${online?'Online':'Offline'}</span></td>
+          <td style="color:var(--mut)">${visto}</td>
+          <td style="color:var(--mut)">${c.player_version||'—'}</td>
+          <td style="white-space:nowrap">
+            <button class="mini" onclick="copiarURL('${url}')">⧉ Copiar URL</button>
+            <button class="mini danger" onclick="alert('Reboot remoto: liga no Fully no próximo passo')">⟳ Reboot</button>
+          </td></tr>`;
+      }).join('');
+    }
+    return topbar('Estações & Canais','1 box ZTE = 1 canal. A URL identifica a estação no player.', `<button class="solid" onclick="novaEstacao()">＋ Nova estação</button>`)
+    +`<div class="panel"><div class="panel-h"><h3>Estações</h3><span class="hint">online = visto nos últimos 5 min</span></div>
+      <table><thead><tr><th>Hotel / Canal</th><th>Status</th><th>Último acesso</th><th>Versão</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
   },
   midia(){ return topbar('Biblioteca de Mídia','Todas as contas · '+MEDIA.length+' itens', `<button class="solid">⬆ Subir mídia</button>`) + mediaPanel(MEDIA); },
   camp(){ return topbar('Campanhas & Agenda','Sobe no período, sai sozinha quando a data passa', `<button class="solid">＋ Nova campanha</button>`) + campPanel(CAMP,true); },
-  contas(){
-    const rows=[
-      ['Porto Bay RJ','12.345.678/0001-90','2 usuários','Cliente'],
-      ['Innside Itaim by Meliá','98.765.432/0001-10','1 usuário','Cliente'],
-      ['Hilton Barra','55.444.333/0001-22','1 usuário','Cliente'],
-      ['Blincast Media','11.222.333/0001-44','5 usuários','Admin'],
-    ].map(r=>`<tr class="row"><td class="est-name">${r[0]}</td><td style="color:var(--mut)">${r[1]}</td><td>${r[2]}</td>
-      <td><span class="badge ${r[3]==='Admin'?'live':'sched'}">${r[3]}</span></td>
-      <td><button class="mini">Gerenciar</button></td></tr>`).join('');
-    return topbar('Contas & Usuários','Login por CNPJ · permissões por perfil', `<button class="solid">＋ Nova conta</button>`)
-    +`<div class="panel"><table><thead><tr><th>Conta</th><th>CNPJ</th><th>Usuários</th><th>Perfil</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  async contas(){
+    const { data: accs, error } = await sb.from('accounts')
+      .select('id,cnpj,nome,ativo,plano').order('created_at',{ascending:true});
+    if(error) throw error;
+    let rows;
+    if(!accs || accs.length===0){
+      rows = '<tr><td colspan="5"><div class="empty"><b>Nenhuma conta ainda</b>Clique em “Nova conta” para cadastrar seu primeiro hotel.</div></td></tr>';
+    } else {
+      rows = accs.map(a=>{
+        const tipo = a.plano==='interno' ? 'Blincast' : 'Cliente';
+        return `<tr class="row">
+          <td class="est-name">${a.nome}</td>
+          <td style="color:var(--mut)">${a.cnpj}</td>
+          <td><span class="badge ${a.ativo?'live':'done'}">${a.ativo?'Ativa':'Inativa'}</span></td>
+          <td><span class="badge ${tipo==='Blincast'?'live':'sched'}">${tipo}</span></td>
+          <td><button class="mini" onclick="alert('Gestão de usuários da conta: próximo passo')">Gerenciar</button></td>
+        </tr>`;
+      }).join('');
+    }
+    return topbar('Contas & Usuários','Cada conta é um hotel (CNPJ). '+(accs?accs.length:0)+' cadastrada(s).', `<button class="solid" onclick="novaConta()">＋ Nova conta</button>`)
+    +`<div class="panel"><table><thead><tr><th>Conta / Hotel</th><th>CNPJ</th><th>Status</th><th>Tipo</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
   },
 
   /* ===== CLIENTE ===== */
@@ -509,6 +567,84 @@ function openPlayer(){
   startPlayer(di.value);
 }
 function closePlayer(){ clearInterval(pTimer); document.getElementById('player').classList.remove('show'); }
+
+/* ---------------- HELPERS DADOS REAIS ---------------- */
+function tempoRel(ts){
+  const s=Math.floor((Date.now()-new Date(ts).getTime())/1000);
+  if(s<60) return s+' s';
+  if(s<3600) return Math.floor(s/60)+' min';
+  if(s<86400) return Math.floor(s/3600)+' h';
+  return Math.floor(s/86400)+' d';
+}
+function copiarURL(url){
+  navigator.clipboard.writeText(url).then(()=>{
+    alert('URL do player copiada:\n\n'+url+'\n\nCole esta URL no Fully Kiosk do box.');
+  }).catch(()=>prompt('Copie a URL do player:',url));
+}
+
+/* ---- Modal genérico ---- */
+function abrirModal(html){
+  let m=document.getElementById('modalRoot');
+  if(!m){ m=document.createElement('div'); m.id='modalRoot'; document.body.appendChild(m); }
+  m.innerHTML='<div class="form-modal" onclick="if(event.target===this)fecharModal()"><div class="form-box">'+html+'</div></div>';
+}
+function fecharModal(){ const m=document.getElementById('modalRoot'); if(m) m.innerHTML=''; }
+
+/* ---- Nova conta (hotel) ---- */
+function novaConta(){
+  abrirModal(`
+    <h3>Nova conta</h3>
+    <div class="fsub">Cadastre um hotel/empresa. O login dele será por este CNPJ.</div>
+    <div class="fld"><label>Nome do hotel / empresa</label><input id="nc_nome" placeholder="Ex: Porto Bay Rio"></div>
+    <div class="fld"><label>CNPJ</label><input id="nc_cnpj" placeholder="00.000.000/0001-00"></div>
+    <div class="fld"><label>Plano</label>
+      <select id="nc_plano"><option value="padrao">Padrão</option><option value="premium">Premium</option></select></div>
+    <div id="nc_msg" class="fmsg"></div>
+    <div class="form-actions">
+      <button class="fa-cancel" onclick="fecharModal()">Cancelar</button>
+      <button class="fa-save" onclick="salvarConta()">Salvar conta</button>
+    </div>`);
+}
+async function salvarConta(){
+  const nome=val('nc_nome'), cnpj=val('nc_cnpj'), plano=val('nc_plano');
+  const msg=document.getElementById('nc_msg');
+  if(!nome||!cnpj){ msg.className='fmsg err'; msg.textContent='Preencha nome e CNPJ.'; return; }
+  msg.className='fmsg'; msg.textContent='Salvando…';
+  const { error } = await sb.from('accounts').insert({ nome, cnpj, plano, ativo:true });
+  if(error){ msg.className='fmsg err'; msg.textContent = error.code==='23505' ? 'Já existe uma conta com esse CNPJ.' : ('Erro: '+error.message); return; }
+  msg.className='fmsg ok'; msg.textContent='Conta criada!';
+  setTimeout(()=>{ fecharModal(); render(); }, 500);
+}
+
+/* ---- Nova estação (canal) ---- */
+async function novaEstacao(){
+  const { data: accs } = await sb.from('accounts').select('id,nome').eq('ativo',true).order('nome');
+  if(!accs || accs.length===0){ alert('Cadastre uma conta (hotel) antes de criar uma estação.'); return; }
+  const opts=accs.map(a=>`<option value="${a.id}">${a.nome}</option>`).join('');
+  abrirModal(`
+    <h3>Nova estação / canal</h3>
+    <div class="fsub">Cada box ZTE é um canal. Um token único será gerado para a URL do player.</div>
+    <div class="fld"><label>Hotel (conta)</label><select id="ne_acc">${opts}</select></div>
+    <div class="fld"><label>Nome do canal</label><input id="ne_nome" placeholder="Ex: Quartos, Lobby, Restaurante"></div>
+    <div class="fld"><label>Descrição (opcional)</label><input id="ne_desc" placeholder="Ex: TVs dos quartos via modulador"></div>
+    <div id="ne_msg" class="fmsg"></div>
+    <div class="form-actions">
+      <button class="fa-cancel" onclick="fecharModal()">Cancelar</button>
+      <button class="fa-save" onclick="salvarEstacao()">Criar estação</button>
+    </div>`);
+}
+async function salvarEstacao(){
+  const account_id=val('ne_acc'), nome=val('ne_nome'), descricao=val('ne_desc');
+  const msg=document.getElementById('ne_msg');
+  if(!account_id||!nome){ msg.className='fmsg err'; msg.textContent='Escolha o hotel e dê um nome ao canal.'; return; }
+  msg.className='fmsg'; msg.textContent='Criando…';
+  const { error } = await sb.from('channels').insert({ account_id, nome, descricao, ativo:true });
+  if(error){ msg.className='fmsg err'; msg.textContent='Erro: '+error.message; return; }
+  msg.className='fmsg ok'; msg.textContent='Estação criada com token!';
+  setTimeout(()=>{ fecharModal(); render(); }, 500);
+}
+
+function val(id){ const e=document.getElementById(id); return e?e.value.trim():''; }
 </script>
 </body>
 </html>
