@@ -596,7 +596,7 @@ function novaConta(){
     <h3>Nova conta</h3>
     <div class="fsub">Cadastre um hotel/empresa. O login dele será por este CNPJ.</div>
     <div class="fld"><label>Nome do hotel / empresa</label><input id="nc_nome" placeholder="Ex: Porto Bay Rio"></div>
-    <div class="fld"><label>CNPJ</label><input id="nc_cnpj" placeholder="00.000.000/0001-00"></div>
+    <div class="fld"><label>CNPJ <span style="color:var(--gold)">*</span></label><input id="nc_cnpj" placeholder="00.000.000/0001-00" maxlength="18" inputmode="numeric" oninput="mascaraCNPJ(this)"></div>
     <div class="fld"><label>Plano</label>
       <select id="nc_plano"><option value="padrao">Padrão</option><option value="premium">Premium</option></select></div>
     <div id="nc_msg" class="fmsg"></div>
@@ -608,12 +608,25 @@ function novaConta(){
 async function salvarConta(){
   const nome=val('nc_nome'), cnpj=val('nc_cnpj'), plano=val('nc_plano');
   const msg=document.getElementById('nc_msg');
-  if(!nome||!cnpj){ msg.className='fmsg err'; msg.textContent='Preencha nome e CNPJ.'; return; }
+  if(!nome){ msg.className='fmsg err'; msg.textContent='Preencha o nome do hotel.'; return; }
+  const soNum = cnpj.replace(/\D/g,'');
+  if(soNum.length!==14){ msg.className='fmsg err'; msg.textContent='CNPJ incompleto. Use o formato 00.000.000/0001-00.'; return; }
   msg.className='fmsg'; msg.textContent='Salvando…';
   const { error } = await sb.from('accounts').insert({ nome, cnpj, plano, ativo:true });
   if(error){ msg.className='fmsg err'; msg.textContent = error.code==='23505' ? 'Já existe uma conta com esse CNPJ.' : ('Erro: '+error.message); return; }
   msg.className='fmsg ok'; msg.textContent='Conta criada!';
   setTimeout(()=>{ fecharModal(); render(); }, 500);
+}
+
+/* ---- Máscara de CNPJ: 00.000.000/0001-00 ---- */
+function mascaraCNPJ(el){
+  let v = el.value.replace(/\D/g,'').slice(0,14);
+  let out = v;
+  if(v.length>12) out = v.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2}).*/,'$1.$2.$3/$4-$5');
+  else if(v.length>8) out = v.replace(/^(\d{2})(\d{3})(\d{3})(\d{0,4}).*/,'$1.$2.$3/$4');
+  else if(v.length>5) out = v.replace(/^(\d{2})(\d{3})(\d{0,3}).*/,'$1.$2.$3');
+  else if(v.length>2) out = v.replace(/^(\d{2})(\d{0,3}).*/,'$1.$2');
+  el.value = out;
 }
 
 /* ---- Nova estação (canal) ---- */
