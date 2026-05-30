@@ -49,7 +49,7 @@
 
 <script>
 /* ================= CONFIG ================= */
-const PLAYER_VERSION = 'v2.0';   // versão do player — aparece na coluna VERSÃO do painel
+const PLAYER_VERSION = 'v2.1';   // versão do player — aparece na coluna VERSÃO do painel
 const SB_URL = 'https://wjyaxmbkdjebulosdtds.supabase.co';
 const SB_KEY = 'sb_publishable_mmTZZoQCGe24bTshASUi1w_JKnyU4sv';
 const MEDIA_BASE = SB_URL + '/storage/v1/object/public/blinplay-media/';
@@ -192,6 +192,11 @@ function avancar(){
 
 /* ================= SINCRONIZAÇÃO ================= */
 async function sincronizar(primeira){
+  // reporta a versão logo de cara (independente do resto), na primeira carga
+  if(primeira){
+    try{ await sb.rpc('reportar_versao', { p_token: token, p_versao: PLAYER_VERSION }); }
+    catch(e){ console.log('reportar_versao falhou:', e); }
+  }
   try{
     const { data, error } = await sb.rpc('get_player_schedule', { p_token: token });
     if(error) throw error;
@@ -204,7 +209,6 @@ async function sincronizar(primeira){
     if(data.canal && data.canal.id) CHANNEL_ID = data.canal.id;
     aplicarPrograma(data, primeira);
     precarregarMidias(data);   // manda o cache baixar tudo em background
-    if(primeira){ try{ sb.rpc('reportar_versao', { p_token: token, p_versao: PLAYER_VERSION }); }catch(e){} }
   }catch(ex){
     // sem rede: se não há nada tocando, tenta a última programação salva
     if(playlist.length===0){
