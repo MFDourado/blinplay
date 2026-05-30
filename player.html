@@ -49,6 +49,7 @@
 
 <script>
 /* ================= CONFIG ================= */
+const PLAYER_VERSION = 'v2.0';   // versão do player — aparece na coluna VERSÃO do painel
 const SB_URL = 'https://wjyaxmbkdjebulosdtds.supabase.co';
 const SB_KEY = 'sb_publishable_mmTZZoQCGe24bTshASUi1w_JKnyU4sv';
 const MEDIA_BASE = SB_URL + '/storage/v1/object/public/blinplay-media/';
@@ -203,6 +204,7 @@ async function sincronizar(primeira){
     if(data.canal && data.canal.id) CHANNEL_ID = data.canal.id;
     aplicarPrograma(data, primeira);
     precarregarMidias(data);   // manda o cache baixar tudo em background
+    if(primeira){ try{ sb.rpc('reportar_versao', { p_token: token, p_versao: PLAYER_VERSION }); }catch(e){} }
   }catch(ex){
     // sem rede: se não há nada tocando, tenta a última programação salva
     if(playlist.length===0){
@@ -319,9 +321,18 @@ function init(){
   sb = window.supabase.createClient(SB_URL, SB_KEY);
   showMsg('Carregando programação…', true);
 
-  // registra o Service Worker (cache offline das mídias)
+  // registra o Service Worker (cache offline) e cuida da auto-atualização
   if('serviceWorker' in navigator){
-    navigator.serviceWorker.register('sw.js').catch(()=>{});
+    navigator.serviceWorker.register('sw.js').then((reg)=>{
+      // procura atualização do SW a cada 30 min (boxes ficam ligados 24/7)
+      setInterval(()=>{ reg.update().catch(()=>{}); }, 30*60*1000);
+    }).catch(()=>{});
+    // quando um SW novo assume o controle, recarrega 1x pra pegar a versão nova
+    let jaRecarregou = false;
+    navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+      if(jaRecarregou) return; jaRecarregou = true;
+      location.reload();
+    });
   }
 
   sincronizar(true).then(()=>{ ligarRealtime(); ligarFallback(); });
