@@ -338,7 +338,8 @@ const NAV = {
     {k:'prog',     ic:'☰', label:'Programação dos Canais'},
     {k:'camp',     ic:'◷', label:'Campanhas & Agenda'},
     {sec:'GESTÃO'},
-    {k:'contas',   ic:'⬡', label:'Contas & Usuários'},
+    {k:'contas',   ic:'⬡', label:'Contas / Hotéis'},
+    {k:'usuarios', ic:'◉', label:'Usuários & Acessos'},
   ],
   cli:[
     {sec:'MEU CANAL'},
@@ -581,12 +582,39 @@ const VIEWS = {
           <td style="color:var(--mut)">${a.cnpj}</td>
           <td><span class="badge ${a.ativo?'live':'done'}">${a.ativo?'Ativa':'Inativa'}</span></td>
           <td><span class="badge ${tipo==='Blincast'?'live':'sched'}">${tipo}</span></td>
-          <td><button class="mini" onclick="alert('Gestão de usuários da conta: próximo passo')">Gerenciar</button></td>
+          <td><button class="mini" onclick="CUR='usuarios';buildNav();render()">Ver usuários</button></td>
         </tr>`;
       }).join('');
     }
-    return topbar('Contas & Usuários','Cada conta é um hotel (CNPJ). '+(accs?accs.length:0)+' cadastrada(s).', `<button class="solid" onclick="novaConta()">＋ Nova conta</button>`)
+    return topbar('Contas / Hotéis','Cada conta é um hotel (CNPJ). '+(accs?accs.length:0)+' cadastrada(s).', `<button class="solid" onclick="novaConta()">＋ Nova conta</button>`)
     +`<div class="panel"><table><thead><tr><th>Conta / Hotel</th><th>CNPJ</th><th>Status</th><th>Tipo</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  },
+
+  async usuarios(){
+    // lista perfis + vínculos
+    const { data: profs, error } = await sb.from('profiles')
+      .select('id,nome,email,role,ativo').neq('role','superadmin').order('created_at',{ascending:false});
+    if(error) throw error;
+    let rows;
+    if(!profs || profs.length===0){
+      rows='<tr><td colspan="4"><div class="empty"><b>Nenhum usuário ainda</b>Clique em “Convidar usuário” para dar acesso a um gerente ou marketing.</div></td></tr>';
+    } else {
+      const papelLabel={gerente_geral:'Gerente geral',gerente_unidade:'Gerente de unidade',marketing:'Marketing'};
+      rows=profs.map(p=>{
+        const ativo = p.ativo!==false;
+        return `<tr class="row">
+          <td><div class="est-name">${p.nome||'—'}</div><div class="est-sub">${p.email||''}</div></td>
+          <td><span class="badge sched">${papelLabel[p.role]||p.role}</span></td>
+          <td><span class="badge ${ativo?'live':'paused'}">${ativo?'Ativo':'Convite pendente'}</span></td>
+          <td style="white-space:nowrap">
+            <button class="mini" onclick="gerenciarVinculos('${p.id}','${(p.nome||'').replace(/'/g,"\\'")}')">Hotéis</button>
+            <button class="mini" onclick="reenviarConvite('${(p.email||'')}')">Reenviar convite</button>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+    return topbar('Usuários & Acessos','Gerentes e marketing. O convite é enviado por e-mail; a pessoa cria a própria senha.', `<button class="solid" onclick="convidarUsuario()">＋ Convidar usuário</button>`)
+      +`<div class="panel"><table><thead><tr><th>Usuário</th><th>Papel</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
   },
 
   /* ===== CLIENTE ===== */
@@ -826,7 +854,90 @@ function mascaraCNPJ(el){
   el.value = out;
 }
 
-/* ---- Nova estação (canal) ---- */
+/* ---------------- USUÁRIOS & ACESSOS ---------------- */
+async function convidarUsuario(){
+  const { data: accs } = await sb.from('accounts').select('id,nome').eq('ativo',true).order('nome');
+  const opts=(accs||[]).map(a=>`<label class="chk"><input type="checkbox" class="uu_acc" value="${a.id}"> ${a.nome}</label>`).join('') || '<span class="chk-empty">Cadastre uma conta primeiro.</span>';
+  abrirModal(`
+    <h3>Convidar usuário</h3>
+    <div class="fsub">A pessoa recebe um e-mail e cria a própria senha.</div>
+    <div class="fld"><label>Nome</label><input id="uu_nome" placeholder="Nome da pessoa"></div>
+    <div class="fld"><label>E-mail</label><input id="uu_email" type="email" placeholder="pessoa@empresa.com"></div>
+    <div class="fld"><label>Papel</label>
+      <select id="uu_papel">
+        <option value="gerente_unidade">Gerente de unidade (1 hotel)</option>
+        <option value="gerente_geral">Gerente geral (vários hotéis)</option>
+        <option value="marketing">Marketing (opera conteúdo)</option>
+      </select></div>
+    <div class="fld"><label>Hotéis que pode acessar</label><div class="checkbox-grid">${opts}</div></div>
+    <div id="uu_msg" class="fmsg"></div>
+    <div class="form-actions">
+      <button class="fa-cancel" onclick="fecharModal()">Cancelar</button>
+      <button class="fa-save" id="uu_btn" onclick="salvarConvite()">Enviar convite</button>
+    </div>`);
+}
+
+async function salvarConvite(){
+  const nome=val('uu_nome'), email=val('uu_email'), papel=val('uu_papel');
+  const contas=[...document.querySelectorAll('.uu_acc:checked')].map(x=>x.value);
+  const msg=document.getElementById('uu_msg'), btn=document.getElementById('uu_btn');
+  if(!nome){ msg.className='fmsg err'; msg.textContent='Informe o nome.'; return; }
+  if(!email){ msg.className='fmsg err'; msg.textContent='Informe o e-mail.'; return; }
+  if(contas.length===0){ msg.className='fmsg err'; msg.textContent='Marque ao menos um hotel.'; return; }
+  btn.disabled=true; msg.className='fmsg'; msg.textContent='Enviando convite…';
+  try{
+    const redirectTo = location.origin + location.pathname.replace(/index\.html$/,'');
+    const { data, error } = await sb.functions.invoke('convidar-usuario', {
+      body: { nome, email, papel, contas, redirectTo }
+    });
+    if(error) throw error;
+    if(!data || data.ok===false) throw new Error(data && data.erro ? data.erro : 'falha');
+    msg.className='fmsg ok'; msg.textContent='Convite enviado para '+email+'!';
+    setTimeout(()=>{ fecharModal(); render(); }, 800);
+  }catch(ex){
+    btn.disabled=false; msg.className='fmsg err'; msg.textContent='Erro: '+(ex.message||ex);
+  }
+}
+
+async function reenviarConvite(email){
+  if(!email) return;
+  alert('Para reenviar o convite de '+email+', use a opção de convite novamente com o mesmo e-mail, ou reenvie pelo Supabase (Authentication → usuário → Resend). Em breve botão direto aqui.');
+}
+
+async function gerenciarVinculos(userId, nome){
+  const [{ data: accs }, { data: vinc }] = await Promise.all([
+    sb.from('accounts').select('id,nome').eq('ativo',true).order('nome'),
+    sb.from('user_accounts').select('account_id').eq('user_id',userId)
+  ]);
+  const have=new Set((vinc||[]).map(v=>v.account_id));
+  const opts=(accs||[]).map(a=>`<label class="chk"><input type="checkbox" class="gv_acc" value="${a.id}" ${have.has(a.id)?'checked':''}> ${a.nome}</label>`).join('');
+  abrirModal(`
+    <h3>Hotéis de ${nome}</h3>
+    <div class="fsub">Marque os hotéis que esta pessoa pode acessar.</div>
+    <div class="fld"><div class="checkbox-grid">${opts}</div></div>
+    <div id="gv_msg" class="fmsg"></div>
+    <div class="form-actions">
+      <button class="fa-cancel" onclick="fecharModal()">Cancelar</button>
+      <button class="fa-save" onclick="salvarVinculos('${userId}')">Salvar</button>
+    </div>`);
+}
+async function salvarVinculos(userId){
+  const contas=[...document.querySelectorAll('.gv_acc:checked')].map(x=>x.value);
+  const msg=document.getElementById('gv_msg');
+  // pega o papel atual do usuário pra manter
+  const { data: prof } = await sb.from('profiles').select('role').eq('id',userId).single();
+  const papel = prof ? prof.role : 'gerente_unidade';
+  msg.className='fmsg'; msg.textContent='Salvando…';
+  // apaga vínculos atuais e regrava
+  await sb.from('user_accounts').delete().eq('user_id',userId);
+  if(contas.length){
+    const rows=contas.map(account_id=>({ user_id:userId, account_id, papel }));
+    const { error } = await sb.from('user_accounts').insert(rows);
+    if(error){ msg.className='fmsg err'; msg.textContent='Erro: '+error.message; return; }
+  }
+  msg.className='fmsg ok'; msg.textContent='Hotéis atualizados!';
+  setTimeout(()=>{ fecharModal(); render(); }, 500);
+}
 async function novaEstacao(){
   const { data: accs } = await sb.from('accounts').select('id,nome').eq('ativo',true).order('nome');
   if(!accs || accs.length===0){ alert('Cadastre uma conta (hotel) antes de criar uma estação.'); return; }
