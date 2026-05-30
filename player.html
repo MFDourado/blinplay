@@ -49,7 +49,7 @@
 
 <script>
 /* ================= CONFIG ================= */
-const PLAYER_VERSION = 'v2.3';   // versão do player — aparece na coluna VERSÃO do painel
+const PLAYER_VERSION = 'v2.4';   // versão do player — aparece na coluna VERSÃO do painel
 const SB_URL = 'https://wjyaxmbkdjebulosdtds.supabase.co';
 const SB_KEY = 'sb_publishable_mmTZZoQCGe24bTshASUi1w_JKnyU4sv';
 const MEDIA_BASE = SB_URL + '/storage/v1/object/public/blinplay-media/';
@@ -279,31 +279,38 @@ function ligarRealtime(){
     .on('postgres_changes', { event:'*', schema:'public', table:'campaign_channels'   }, aoMudar)
     .on('postgres_changes', { event:'*', schema:'public', table:'channels'            }, aoMudarCanal)
     .subscribe((status)=>{
-      if(status==='SUBSCRIBED'){
-        // Realtime conectou: instantâneo, não precisa de auto-reload
-        realtimeOK = true;
-        if(resyncTimer){ clearInterval(resyncTimer); resyncTimer=null; }
-      }
+      if(status==='SUBSCRIBED') realtimeOK = true;
       if(status==='CLOSED' || status==='CHANNEL_ERROR' || status==='TIMED_OUT'){
-        // Realtime não conectou (ex: rede do box bloqueia): liga auto-reload
         realtimeOK = false;
-        ligarFallback();
         setTimeout(ligarRealtime, 10000);
       }
     });
-
-  // se em 8s o Realtime não confirmou, assume que está bloqueado e liga o auto-reload
-  setTimeout(()=>{ if(!realtimeOK) ligarFallback(); }, 8000);
 }
 
-// AUTO-RELOAD: quando o Realtime não está ativo, recarrega a página inteira
-// a cada 15s. Isso garante que qualquer mudança no painel apareça no box,
-// mesmo em redes que bloqueiam conexão em tempo real.
+// VERIFICAÇÃO PERIÓDICA (sempre ativa): a cada 15s busca a programação atual
+// e, se algo mudou (campanha, conteúdo) ou há pedido de refresh, recarrega a
+// página. Funciona mesmo quando o Realtime conecta mas não entrega eventos.
 function ligarFallback(){
   if(resyncTimer) return;
-  resyncTimer = setInterval(()=>{
-    if(realtimeOK){ clearInterval(resyncTimer); resyncTimer=null; return; }
-    location.reload();
+  resyncTimer = setInterval(async ()=>{
+    try{
+      // 1) pedido de refresh remoto?
+      const r = await sb.rpc('checar_refresh', { p_token: token });
+      if(r && r.data){
+        const quando = new Date(r.data).getTime();
+        if(Date.now()-quando < 20000){ location.reload(); return; }
+      }
+    }catch(e){}
+    try{
+      // 2) a programação mudou?
+      const { data } = await sb.rpc('get_player_schedule', { p_token: token });
+      if(data && data.ok!==false){
+        const novaSig = assinatura(montarPlaylist(data));
+        if(novaSig !== lastSig){ location.reload(); return; }
+        // reporta presença (mantém "online" e atualiza último acesso)
+        try{ sb.rpc('reportar_versao', { p_token: token, p_versao: PLAYER_VERSION }); }catch(e){}
+      }
+    }catch(e){}
   }, 15000);
 }
 
