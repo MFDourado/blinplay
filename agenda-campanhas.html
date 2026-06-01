@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BlinPlay — Agenda de Campanhas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Saira:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F7F7F8; --card:#FFFFFF; --ink:#1B1B1F; --body:#3F3F46; --muted:#9A9AA2;
+    --line:#ECECEE; --line2:#E2E2E5; --gold:#F5A800;
+    --ativa:#F5A800;   --ativa-bg:#FFF6E0;   --ativa-tx:#946400;
+    --agend:#4F9DF0;   --agend-bg:#EAF3FD;   --agend-tx:#2C5E9C;
+    --pausa:#9A9AA2;   --pausa-bg:#F1F1F3;   --pausa-tx:#6A6A72;
+    --encer:#C3C3CA;   --encer-bg:#F6F6F7;   --encer-tx:#9A9AA0;
+    --radius:16px; --font:'Saira',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--bg);color:var(--body);font-family:var(--font);-webkit-font-smoothing:antialiased}
+  body{padding:32px 28px;min-height:100vh}
+  .wrap{max-width:1000px;margin:0 auto}
+
+  .top{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:24px}
+  .brand{display:flex;align-items:center;gap:11px}
+  .brand svg{width:30px;height:30px;flex:none}
+  .brand .name{font-weight:800;font-size:21px;letter-spacing:.4px;color:var(--ink);line-height:1}
+  .brand .name span{color:var(--gold)}
+  .brand .sub{font-size:12.5px;color:var(--muted);margin-top:3px;letter-spacing:.2px}
+  .hotel{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line2);
+    padding:8px 14px;border-radius:999px;font-size:13.5px;color:var(--body)}
+  .hotel b{color:var(--ink);font-weight:600}
+  .hotel .dot{width:7px;height:7px;border-radius:50%;background:var(--gold)}
+
+  .perm{background:var(--card);border:1px solid var(--line2);border-radius:14px;padding:13px 16px;margin-bottom:16px;
+    display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .perm .lbl{font-size:11.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);
+    display:flex;align-items:center;gap:7px}
+  .perm .lbl::before{content:'∞';font-size:15px;color:var(--gold)}
+  .perm .chips{display:flex;gap:9px;flex-wrap:wrap}
+  .chip{display:inline-flex;align-items:center;gap:8px;background:var(--ativa-bg);color:var(--ativa-tx);
+    border:1px solid #F3E2B5;border-radius:999px;padding:6px 13px;font-size:13px;font-weight:600;cursor:pointer;transition:.15s}
+  .chip:hover{border-color:var(--gold)}
+  .chip .d{width:7px;height:7px;border-radius:50%;background:var(--gold);flex:none}
+
+  .toolbar{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:14px;flex-wrap:wrap}
+  .month{display:flex;align-items:center;gap:12px}
+  .month h1{font-size:23px;font-weight:700;color:var(--ink);letter-spacing:.3px;text-transform:capitalize;min-width:175px}
+  .nav{display:flex;gap:6px}
+  .btn{background:var(--card);border:1px solid var(--line2);color:var(--body);font-family:var(--font);
+    font-size:13.5px;font-weight:600;padding:9px 14px;border-radius:10px;cursor:pointer;transition:.15s;display:inline-flex;align-items:center;gap:7px}
+  .btn:hover{border-color:var(--gold);color:var(--ink)}
+  .btn.icon{padding:8px 13px;font-size:16px;line-height:1}
+  .btn.today .d{width:7px;height:7px;border-radius:50%;background:var(--gold)}
+
+  .cal{background:var(--card);border:1px solid var(--line2);border-radius:var(--radius);overflow:hidden;
+    box-shadow:0 1px 2px rgba(20,20,30,.04)}
+  .dow{display:grid;grid-template-columns:repeat(7,1fr);background:#FCFCFD;border-bottom:1px solid var(--line)}
+  .dow div{padding:13px 12px;font-size:11.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);text-align:left}
+  .weeks{display:flex;flex-direction:column}
+  .week{position:relative;border-bottom:1px solid var(--line)}
+  .week:last-child{border-bottom:none}
+  .week .days{display:grid;grid-template-columns:repeat(7,1fr)}
+  .day{min-height:104px;border-right:1px solid var(--line);padding:9px 10px;cursor:pointer;transition:background .12s}
+  .day:last-child{border-right:none}
+  .day:hover{background:#FCFAF4}
+  .day .n{font-size:14px;font-weight:600;color:var(--body);width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:50%}
+  .day.out{background:#FAFAFB}
+  .day.out .n{color:#CBCBD0}
+  .day.today .n{background:var(--gold);color:#fff;font-weight:800}
+
+  .bars{position:absolute;left:0;right:0;top:40px;bottom:6px;pointer-events:none}
+  .bar{position:absolute;height:23px;border-radius:7px;display:flex;align-items:center;gap:7px;
+    padding:0 9px;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;
+    pointer-events:auto;cursor:pointer;border:1px solid transparent}
+  .bar .d{width:7px;height:7px;border-radius:50%;flex:none}
+  .bar.ativa{background:var(--ativa-bg);color:var(--ativa-tx);border-color:#F3E2B5}
+  .bar.ativa .d{background:var(--ativa)}
+  .bar.agendada{background:var(--agend-bg);color:var(--agend-tx);border-color:#D3E4F8}
+  .bar.agendada .d{background:var(--agend)}
+  .bar.pausada{background:var(--pausa-bg);color:var(--pausa-tx);border-color:#E2E2E5}
+  .bar.pausada .d{background:var(--pausa)}
+  .bar.encerrada{background:var(--encer-bg);color:var(--encer-tx);border-color:#ECECEE}
+  .bar.encerrada .d{background:var(--encer)}
+  .bar:not(.start){border-top-left-radius:0;border-bottom-left-radius:0}
+  .bar:not(.start) .d{display:none}
+  .bar:not(.end){border-top-right-radius:0;border-bottom-right-radius:0}
+  .bar.cont-left{padding-left:12px}
+  .bar.cont-left::before{content:'‹';position:absolute;left:4px;opacity:.45;font-weight:800}
+  .bar.cont-right::after{content:'›';position:absolute;right:5px;opacity:.45;font-weight:800}
+  .more-chip{position:absolute;font-size:11.5px;font-weight:600;color:var(--muted)}
+
+  .legend{display:flex;flex-wrap:wrap;align-items:center;gap:14px 22px;margin-top:16px;padding:14px 18px;background:var(--card);
+    border:1px solid var(--line2);border-radius:12px;font-size:13px;color:var(--body)}
+  .legend .it{display:flex;align-items:center;gap:9px}
+  .legend .sw{width:13px;height:13px;border-radius:4px;flex:none}
+  .sw.ativa{background:var(--ativa)} .sw.agendada{background:var(--agend)}
+  .sw.pausada{background:var(--pausa)} .sw.encerrada{background:var(--encer)}
+  .legend .hint{color:var(--muted);margin-left:auto;font-size:12.5px}
+
+  .overlay{position:fixed;inset:0;background:rgba(20,20,28,.42);backdrop-filter:blur(3px);display:none;
+    align-items:center;justify-content:center;padding:20px;z-index:50}
+  .overlay.show{display:flex}
+  .modal{background:var(--card);border:1px solid var(--line2);border-radius:18px;width:100%;max-width:460px;
+    max-height:82vh;overflow:auto;box-shadow:0 24px 60px rgba(20,20,30,.22)}
+  .modal .mh{padding:18px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--card)}
+  .modal .mh .d{font-size:18px;font-weight:700;color:var(--ink)}
+  .modal .mh .x{background:none;border:none;color:var(--muted);font-size:24px;cursor:pointer;line-height:1}
+  .modal .mh .x:hover{color:var(--ink)}
+  .modal .mb{padding:8px 20px 20px}
+  .empty{color:var(--muted);font-size:14px;padding:24px 0;text-align:center}
+  .camp{border:1px solid var(--line);border-radius:13px;padding:14px;margin-top:12px}
+  .camp .ct{display:flex;align-items:center;gap:9px;margin-bottom:11px}
+  .camp .pin{width:9px;height:9px;border-radius:3px;flex:none}
+  .pin.ativa{background:var(--ativa)} .pin.agendada{background:var(--agend)}
+  .pin.pausada{background:var(--pausa)} .pin.encerrada{background:var(--encer)}
+  .camp .nm{font-size:15px;font-weight:700;color:var(--ink)}
+  .camp .tag{margin-left:auto;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:3px 9px;border-radius:999px}
+  .tag.ativa{background:var(--ativa-bg);color:var(--ativa-tx)}
+  .tag.agendada{background:var(--agend-bg);color:var(--agend-tx)}
+  .tag.pausada{background:var(--pausa-bg);color:var(--pausa-tx)}
+  .tag.encerrada{background:var(--encer-bg);color:var(--encer-tx)}
+  .camp .meta{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px}
+  .camp .meta .m{font-size:12px;color:var(--muted)}
+  .camp .meta .m b{display:block;color:var(--body);font-weight:600;font-size:13px;margin-top:2px}
+  @media(max-width:640px){
+    body{padding:16px 14px}
+    .day{min-height:78px;padding:6px}
+    .bar{font-size:11px;height:21px;padding:0 7px}
+    .camp .meta{grid-template-columns:1fr}
+    .month h1{font-size:20px;min-width:0}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="top">
+    <div class="brand">
+      <svg viewBox="0 0 48 60" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M6 4 L42 30 L6 56 L12 30 Z" fill="#F5A800"/><path d="M14 18 L34 30 L14 42 Z" fill="#fff"/>
+      </svg>
+      <div>
+        <div class="name">Blin<span>Play</span></div>
+        <div class="sub">Agenda de campanhas</div>
+      </div>
+    </div>
+    <div class="hotel"><span class="dot"></span> Exibindo: <b id="hotelName">Hotel Exemplo</b></div>
+  </div>
+
+  <div class="perm" id="permStrip" style="display:none">
+    <div class="lbl">Sempre no ar</div>
+    <div class="chips" id="permChips"></div>
+  </div>
+
+  <div class="toolbar">
+    <div class="month">
+      <div class="nav">
+        <button class="btn icon" id="prev" aria-label="Mês anterior">‹</button>
+        <button class="btn icon" id="next" aria-label="Próximo mês">›</button>
+      </div>
+      <h1 id="monthLabel">—</h1>
+    </div>
+    <button class="btn today" id="today"><span class="d"></span> Hoje</button>
+  </div>
+
+  <div class="cal">
+    <div class="dow"><div>Dom</div><div>Seg</div><div>Ter</div><div>Qua</div><div>Qui</div><div>Sex</div><div>Sáb</div></div>
+    <div class="weeks" id="weeks"></div>
+  </div>
+
+  <div class="legend">
+    <div class="it"><span class="sw ativa"></span> No ar</div>
+    <div class="it"><span class="sw agendada"></span> Agendada</div>
+    <div class="it"><span class="sw pausada"></span> Pausada</div>
+    <div class="it"><span class="sw encerrada"></span> Encerrada</div>
+    <div class="hint">Toque em um dia para ver os detalhes</div>
+  </div>
+
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="mh"><div class="d" id="modalDate">—</div><button class="x" id="closeModal" aria-label="Fechar">×</button></div>
+    <div class="mb" id="modalBody"></div>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   BLINPLAY · AGENDA DE CAMPANHAS  (tema claro, versão clean)
+   As campanhas PERMANENTES aparecem na faixa "Sempre no ar"; o calendário
+   mostra só as campanhas com período (que mudam ao longo do mês).
+   Para dados reais, troque loadCampaigns() pela consulta ao Supabase.
+   ===================================================================== */
+
+const CAMPANHAS_EXEMPLO = [
+  { id:1, nome:'Café da Manhã Premium', inicio:'2026-06-01', fim:null,        status:'ativa',    midias:2, frequencia:'a cada 20 min', presencaMinima:30, permanente:true },
+  { id:8, nome:'Wi-Fi & Serviços',      inicio:'2026-06-01', fim:null,        status:'ativa',    midias:1, frequencia:'a cada 40 min', presencaMinima:null, permanente:true },
+  { id:2, nome:'Happy Hour no Bar',     inicio:'2026-06-03', fim:'2026-06-15', status:'ativa',    midias:3, frequencia:'a cada 15 min', presencaMinima:24, permanente:false },
+  { id:3, nome:'Day Use Piscina',       inicio:'2026-06-06', fim:'2026-06-22', status:'ativa',    midias:1, frequencia:'a cada 30 min', presencaMinima:12, permanente:false },
+  { id:4, nome:'Dia dos Namorados',     inicio:'2026-06-09', fim:'2026-06-12', status:'pausada',  midias:4, frequencia:'a cada 10 min', presencaMinima:40, permanente:false },
+  { id:5, nome:'Spa & Massagem',        inicio:'2026-06-16', fim:'2026-06-28', status:'agendada', midias:2, frequencia:'a cada 25 min', presencaMinima:18, permanente:false },
+  { id:6, nome:'Festa Junina',          inicio:'2026-06-20', fim:'2026-06-24', status:'agendada', midias:3, frequencia:'a cada 12 min', presencaMinima:35, permanente:false },
+  { id:7, nome:'Promo de Maio',         inicio:'2026-05-20', fim:'2026-06-02', status:'encerrada',midias:2, frequencia:'a cada 20 min', presencaMinima:15, permanente:false },
+];
+
+async function loadCampaigns(){
+  // ---- VERSÃO REAL (exemplo) ----
+  // const { data, error } = await supabase
+  //   .from('campanhas')
+  //   .select('id, nome, inicio, fim, status, midias:campanha_midias(count), frequencia, presenca_minima, permanente')
+  //   .eq('hotel_id', hotelAtualId);
+  // if (error){ console.error(error); return []; }
+  // return data.map(c => ({ ...c, presencaMinima:c.presenca_minima }));
+  return CAMPANHAS_EXEMPLO;
+}
+
+const MESES=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+const HOJE=new Date(2026,5,1);              // simulado; no painel real use new Date()
+let view=new Date(HOJE.getFullYear(),HOJE.getMonth(),1);
+let CAMPS=[], PERMS=[], TIMED=[];
+
+const parse=s=>{const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d);};
+const sameDay=(a,b)=>a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();
+const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x;};
+const sod=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate());
+const cStart=c=>parse(c.inicio);
+const cEnd=c=>c.fim?parse(c.fim):new Date(2999,0,1);
+const activeOn=(c,day)=>{const d=sod(day);return d>=sod(cStart(c))&&d<=sod(cEnd(c));};
+const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt=s=>{if(!s)return'—';return parse(s).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'});};
+
+function buildWeeks(){
+  const first=new Date(view.getFullYear(),view.getMonth(),1);
+  let cur=addDays(first,-first.getDay());const weeks=[];
+  for(let w=0;w<6;w++){const days=[];for(let i=0;i<7;i++){days.push(cur);cur=addDays(cur,1);}weeks.push(days);
+    if(cur.getMonth()!==view.getMonth()&&cur.getDate()>7&&w>=4)break;}
+  return weeks;
+}
+
+function renderPerms(){
+  const strip=document.getElementById('permStrip'), chips=document.getElementById('permChips');
+  if(!PERMS.length){strip.style.display='none';return;}
+  strip.style.display='flex';
+  chips.innerHTML=PERMS.map(c=>'<span class="chip" data-id="'+c.id+'"><span class="d"></span>'+esc(c.nome)+'</span>').join('');
+  chips.querySelectorAll('.chip').forEach(ch=>ch.onclick=()=>openCampaign(+ch.dataset.id));
+}
+
+function render(){
+  document.getElementById('monthLabel').textContent=MESES[view.getMonth()]+' '+view.getFullYear();
+  const weeks=buildWeeks(), cont=document.getElementById('weeks'); cont.innerHTML='';
+  weeks.forEach(days=>{
+    const wEl=document.createElement('div');wEl.className='week';
+    const dEl=document.createElement('div');dEl.className='days';
+    days.forEach(day=>{
+      const cell=document.createElement('div');cell.className='day';
+      if(day.getMonth()!==view.getMonth())cell.classList.add('out');
+      if(sameDay(day,HOJE))cell.classList.add('today');
+      const n=document.createElement('div');n.className='n';n.textContent=day.getDate();
+      cell.appendChild(n);
+      cell.addEventListener('click',()=>openDay(day));
+      dEl.appendChild(cell);
+    });
+    wEl.appendChild(dEl);
+
+    const bars=document.createElement('div');bars.className='bars';
+    const ws=sod(days[0]), we=sod(days[6]);
+    const segs=TIMED.filter(c=>sod(cStart(c))<=we&&sod(cEnd(c))>=ws)
+      .sort((a,b)=>cStart(a)-cStart(b));
+    const lanes=[];const laneCount={};const LANE_H=27,MAX=3;let maxLane=-1,overflow=false;
+    segs.forEach(c=>{
+      const s=sod(cStart(c)),e=sod(cEnd(c));
+      let c0=0;for(let i=0;i<7;i++){if(days[i]>=s){c0=i;break;}}
+      if(s<ws)c0=0;
+      let c1=6;for(let i=6;i>=0;i--){if(days[i]<=e){c1=i;break;}}
+      if(c1<c0)return;
+      let lane=0;while(lanes[lane]!==undefined&&lanes[lane]>=c0)lane++;
+      lanes[lane]=c1;for(let cc=c0;cc<=c1;cc++)laneCount[cc]=Math.max(laneCount[cc]||0,lane+1);
+      if(lane>=MAX){overflow=true;return;}
+      maxLane=Math.max(maxLane,lane);
+      const startsHere=s>=ws,endsHere=e<=we;
+      const bar=document.createElement('div');
+      bar.className='bar '+c.status+(startsHere?' start':'')+(endsHere?' end':'')+(!startsHere?' cont-left':'')+(!endsHere?' cont-right':'');
+      bar.style.left='calc('+(c0/7*100)+'% + 5px)';
+      bar.style.width='calc('+((c1-c0+1)/7*100)+'% - 10px)';
+      bar.style.top=(lane*LANE_H)+'px';
+      bar.innerHTML='<span class="d"></span><span>'+esc(c.nome)+'</span>';
+      bar.title=c.nome;
+      bar.addEventListener('click',ev=>{ev.stopPropagation();openDay(s<ws?ws:s);});
+      bars.appendChild(bar);
+    });
+    days.forEach((day,i)=>{const ex=(laneCount[i]||0)-MAX;if(ex>0){
+      const m=document.createElement('div');m.className='more-chip';
+      m.style.left='calc('+(i/7*100)+'% + 8px)';m.style.top=(MAX*LANE_H)+'px';
+      m.textContent='+'+ex+' mais';bars.appendChild(m);}});
+    const lines=(maxLane>=0?maxLane+1:0)+(overflow?1:0);
+    const h=Math.max(96,44+lines*LANE_H+6);
+    dEl.querySelectorAll('.day').forEach(d=>d.style.minHeight=h+'px');
+    wEl.appendChild(bars);
+    cont.appendChild(wEl);
+  });
+}
+
+function campCard(c){
+  const st={ativa:'No ar',agendada:'Agendada',pausada:'Pausada',encerrada:'Encerrada'};
+  const periodo=c.permanente?'A partir de '+fmt(c.inicio)+' · permanente':fmt(c.inicio)+' até '+fmt(c.fim);
+  const pres=c.presencaMinima?c.presencaMinima+'×/dia':'—';
+  return '<div class="camp"><div class="ct"><span class="pin '+c.status+'"></span>'
+    +'<span class="nm">'+esc(c.nome)+(c.permanente?' ∞':'')+'</span>'
+    +'<span class="tag '+c.status+'">'+st[c.status]+'</span></div><div class="meta">'
+    +'<div class="m">Período<b>'+periodo+'</b></div>'
+    +'<div class="m">Mídias<b>'+c.midias+' '+(c.midias>1?'peças':'peça')+'</b></div>'
+    +'<div class="m">Frequência<b>'+esc(c.frequencia)+'</b></div>'
+    +'<div class="m">Presença mínima<b>'+pres+'</b></div></div></div>';
+}
+function showModal(title,html){document.getElementById('modalDate').textContent=title;
+  document.getElementById('modalBody').innerHTML=html;document.getElementById('overlay').classList.add('show');}
+
+function openDay(day){
+  const list=CAMPS.filter(c=>activeOn(c,day))
+    .sort((a,b)=>({ativa:0,agendada:1,pausada:2,encerrada:3}[a.status])-({ativa:0,agendada:1,pausada:2,encerrada:3}[b.status]));
+  const label=day.toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'});
+  showModal(label.charAt(0).toUpperCase()+label.slice(1), list.length?list.map(campCard).join(''):'<div class="empty">Nenhuma campanha neste dia.</div>');
+}
+function openCampaign(id){const c=CAMPS.find(x=>x.id===id);if(c)showModal(c.nome,campCard(c));}
+
+document.getElementById('prev').onclick=()=>{view.setMonth(view.getMonth()-1);render();};
+document.getElementById('next').onclick=()=>{view.setMonth(view.getMonth()+1);render();};
+document.getElementById('today').onclick=()=>{view=new Date(HOJE.getFullYear(),HOJE.getMonth(),1);render();};
+document.getElementById('closeModal').onclick=()=>document.getElementById('overlay').classList.remove('show');
+document.getElementById('overlay').onclick=e=>{if(e.target.id==='overlay')document.getElementById('overlay').classList.remove('show');};
+document.addEventListener('keydown',e=>{if(e.key==='Escape')document.getElementById('overlay').classList.remove('show');});
+
+(async()=>{CAMPS=await loadCampaigns();PERMS=CAMPS.filter(c=>c.permanente);TIMED=CAMPS.filter(c=>!c.permanente);renderPerms();render();})();
+</script>
+</body>
+</html>
