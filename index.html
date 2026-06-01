@@ -263,6 +263,44 @@
   .hp-nome{font-family:'Saira';font-weight:700;font-size:15px;color:var(--txt)}
   .hp-cnpj{font-size:11.5px;color:var(--mut)}
   @media(max-width:820px){.prog-grid{grid-template-columns:1fr}}
+  /* ===== AGENDA (calendário de campanhas) ===== */
+  .ag-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+  .ag-nav{display:flex;align-items:center;gap:10px}
+  .ag-mes{font-family:'Saira';font-weight:700;font-size:18px;color:var(--txt);text-transform:capitalize;min-width:150px}
+  .ag-btn{background:var(--surf2);border:1px solid var(--line2);color:var(--txt);font-family:'Saira';font-weight:600;font-size:13px;padding:7px 12px;border-radius:9px;cursor:pointer;transition:.13s}
+  .ag-btn:hover{border-color:var(--gold)}
+  .ag-grid{border:1px solid var(--line);border-radius:var(--rs);overflow:hidden}
+  .ag-dow{display:grid;grid-template-columns:repeat(7,1fr);background:#0c0c10;border-bottom:1px solid var(--line)}
+  .ag-dow div{padding:9px 10px;font-size:10.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--mut)}
+  .ag-week{position:relative;border-bottom:1px solid var(--line)}
+  .ag-week:last-child{border-bottom:0}
+  .ag-days{display:grid;grid-template-columns:repeat(7,1fr)}
+  .ag-day{border-right:1px solid var(--line);padding:7px 8px;cursor:pointer;transition:background .12s}
+  .ag-day:last-child{border-right:0}
+  .ag-day:hover{background:var(--gold-soft)}
+  .ag-day.out{background:#0c0c10}
+  .ag-n{font-size:12.5px;font-weight:600;color:var(--mut);width:24px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:50%}
+  .ag-day.out .ag-n{color:#3a3a42}
+  .ag-day.today .ag-n{background:var(--gold);color:#0a0a0c;font-weight:800}
+  .ag-bars{position:absolute;left:0;right:0;top:34px;bottom:5px;pointer-events:none}
+  .ag-ev{position:absolute;height:21px;border-radius:6px;display:flex;align-items:center;gap:6px;padding:0 8px;font-size:11.5px;font-weight:600;white-space:nowrap;overflow:hidden;pointer-events:auto;cursor:pointer;border:1px solid}
+  .ag-ev .dot{width:6px;height:6px;border-radius:50%;flex:none}
+  .ag-ev.live{background:rgba(245,168,0,.16);color:#f0b53d;border-color:rgba(245,168,0,.4)} .ag-ev.live .dot{background:var(--gold)}
+  .ag-ev.sched{background:rgba(90,169,255,.14);color:#8fc3ff;border-color:rgba(90,169,255,.4)} .ag-ev.sched .dot{background:var(--info)}
+  .ag-ev.paused{background:rgba(255,255,255,.06);color:var(--mut);border-color:var(--line2)} .ag-ev.paused .dot{background:var(--mut)}
+  .ag-ev.done{background:rgba(255,255,255,.04);color:var(--mut2);border-color:var(--line);opacity:.75} .ag-ev.done .dot{background:var(--mut2)}
+  .ag-ev:not(.s){border-top-left-radius:0;border-bottom-left-radius:0} .ag-ev:not(.s) .dot{display:none}
+  .ag-ev:not(.e){border-top-right-radius:0;border-bottom-right-radius:0}
+  .ag-more{position:absolute;font-size:10.5px;font-weight:600;color:var(--mut)}
+  .ag-leg{display:flex;flex-wrap:wrap;gap:10px 18px;margin-top:12px;font-size:12px;color:var(--mut)}
+  .ag-leg .it{display:flex;align-items:center;gap:7px}
+  .ag-leg .sw{width:12px;height:12px;border-radius:3px;flex:none}
+  .ag-sched-modal{display:flex;flex-direction:column;gap:10px}
+  .ag-cd{border:1px solid var(--line);border-radius:var(--rs);padding:12px 13px;background:#0c0c10}
+  .ag-cd .ct{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .ag-cd .nm{font-family:'Saira';font-weight:700;font-size:14.5px;color:var(--txt)}
+  .ag-cd .meta{display:grid;grid-template-columns:1fr 1fr;gap:7px 12px;font-size:12px;color:var(--mut)}
+  .ag-cd .meta b{display:block;color:var(--txt);font-weight:600;font-size:12.5px;margin-top:1px}
 </style>
 </head>
 <body>
@@ -678,6 +716,7 @@ const VIEWS = {
       }).join('');
     }
     return topbar('Campanhas & Agenda','Entra no rodízio no período, sai sozinha quando a data passa', `<button class="solid" onclick="novaCampanha()">＋ Nova campanha</button>`)
+      + agendaPanel(camps||[])
       + `<div class="panel"><div class="panel-h"><h3>Campanhas</h3><span class="hint">rodízio: padrão · padrão · campanha · padrão…</span></div>${rows}</div>`;
   },
   async contas(){
@@ -789,6 +828,7 @@ const VIEWS = {
       }).join('');
     }
     return topbar('Minhas Campanhas','Você define mídias, datas e frequência. Some sozinha quando a data passa.', `<button class="solid" onclick="novaCampanha()">＋ Nova campanha</button>`)
+      + agendaPanel(camps||[])
       +`<div class="panel"><div class="panel-h"><h3>Campanhas</h3><span class="hint">${CLI_ACC.nome}</span></div>${rows}</div>`;
   },
   async cli_canais(){
@@ -918,6 +958,114 @@ function copiarURL(url){
   navigator.clipboard.writeText(url).then(()=>{
     alert('URL do player copiada:\n\n'+url+'\n\nCole esta URL no Fully Kiosk do box.');
   }).catch(()=>prompt('Copie a URL do player:',url));
+}
+
+/* ---- Agenda (calendário de campanhas) ---- */
+let AG_REF = (function(){const d=new Date();return new Date(d.getFullYear(),d.getMonth(),1);})();
+const AG_MESES=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+function agParse(s){const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d);}
+function agSod(d){return new Date(d.getFullYear(),d.getMonth(),d.getDate());}
+function agAdd(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return x;}
+function agSame(a,b){return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();}
+function agIso(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function agStatus(c){const hoje=new Date().toISOString().slice(0,10);
+  if(!c.ativo)return'paused'; if(hoje<c.data_inicio)return'sched'; if(hoje>c.data_fim)return'done'; return'live';}
+function agPrev(){AG_REF=new Date(AG_REF.getFullYear(),AG_REF.getMonth()-1,1);render();}
+function agNext(){AG_REF=new Date(AG_REF.getFullYear(),AG_REF.getMonth()+1,1);render();}
+function agHoje(){const d=new Date();AG_REF=new Date(d.getFullYear(),d.getMonth(),1);render();}
+
+function agendaPanel(camps){
+  window.__AGCAMPS = camps||[];
+  const hoje=new Date();
+  const first=new Date(AG_REF.getFullYear(),AG_REF.getMonth(),1);
+  let cur=agAdd(first,-first.getDay());
+  const weeks=[];
+  for(let w=0;w<6;w++){const days=[];for(let i=0;i<7;i++){days.push(cur);cur=agAdd(cur,1);}weeks.push(days);
+    if(cur.getMonth()!==AG_REF.getMonth()&&cur.getDate()>7&&w>=4)break;}
+  const LANE_H=24,MAX=3;
+  let weeksHtml='';
+  weeks.forEach(days=>{
+    const ws=agSod(days[0]), we=agSod(days[6]);
+    let daysHtml='';
+    days.forEach(day=>{
+      const out=day.getMonth()!==AG_REF.getMonth()?' out':'';
+      const td=agSame(day,hoje)?' today':'';
+      daysHtml+=`<div class="ag-day${out}${td}" onclick="agDia('${agIso(day)}')"><div class="ag-n">${day.getDate()}</div></div>`;
+    });
+    // barras
+    const segs=(camps||[]).filter(c=>agSod(agParse(c.data_inicio))<=we&&agSod(agParse(c.data_fim))>=ws)
+      .sort((a,b)=>agParse(a.data_inicio)-agParse(b.data_inicio));
+    const lanes=[];const laneCount={};let maxLane=-1,overflow=false;let barsHtml='';
+    segs.forEach(c=>{
+      const s=agSod(agParse(c.data_inicio)),e=agSod(agParse(c.data_fim));
+      let c0=0;for(let i=0;i<7;i++){if(days[i]>=s){c0=i;break;}} if(s<ws)c0=0;
+      let c1=6;for(let i=6;i>=0;i--){if(days[i]<=e){c1=i;break;}}
+      if(c1<c0)return;
+      let lane=0;while(lanes[lane]!==undefined&&lanes[lane]>=c0)lane++;
+      lanes[lane]=c1;for(let cc=c0;cc<=c1;cc++)laneCount[cc]=Math.max(laneCount[cc]||0,lane+1);
+      if(lane>=MAX){overflow=true;return;}
+      maxLane=Math.max(maxLane,lane);
+      const st=agStatus(c), sh=s>=ws, eh=e<=we;
+      const cls='ag-ev '+st+(sh?' s':'')+(eh?' e':'');
+      const left=(c0/7*100), width=((c1-c0+1)/7*100);
+      const nm=(c.nome||'').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+      barsHtml+=`<div class="${cls}" title="${nm}" onclick="event.stopPropagation();agDia('${agIso(s<ws?ws:s)}')" `
+        +`style="left:calc(${left}% + 4px);width:calc(${width}% - 8px);top:${lane*LANE_H}px"><span class="dot"></span><span>${nm}</span></div>`;
+    });
+    days.forEach((day,i)=>{const ex=(laneCount[i]||0)-MAX;if(ex>0){
+      barsHtml+=`<div class="ag-more" style="left:calc(${i/7*100}% + 6px);top:${MAX*LANE_H}px">+${ex} mais</div>`;}});
+    const lines=(maxLane>=0?maxLane+1:0)+(overflow?1:0);
+    const h=Math.max(88,38+lines*LANE_H+6);
+    daysHtml=daysHtml.replace(/class="ag-day/g,`style="min-height:${h}px" class="ag-day`);
+    weeksHtml+=`<div class="ag-week"><div class="ag-days">${daysHtml}</div><div class="ag-bars">${barsHtml}</div></div>`;
+  });
+  return `<div class="panel">
+    <div class="ag-bar">
+      <div class="ag-nav">
+        <button class="ag-btn" onclick="agPrev()" aria-label="Mês anterior">‹</button>
+        <button class="ag-btn" onclick="agNext()" aria-label="Próximo mês">›</button>
+        <div class="ag-mes">${AG_MESES[AG_REF.getMonth()]} ${AG_REF.getFullYear()}</div>
+      </div>
+      <button class="ag-btn" onclick="agHoje()">Hoje</button>
+    </div>
+    <div class="ag-grid">
+      <div class="ag-dow"><div>Dom</div><div>Seg</div><div>Ter</div><div>Qua</div><div>Qui</div><div>Sex</div><div>Sáb</div></div>
+      ${weeksHtml}
+    </div>
+    <div class="ag-leg">
+      <div class="it"><span class="sw" style="background:var(--gold)"></span> No ar</div>
+      <div class="it"><span class="sw" style="background:var(--info)"></span> Agendada</div>
+      <div class="it"><span class="sw" style="background:var(--mut)"></span> Pausada</div>
+      <div class="it"><span class="sw" style="background:var(--mut2)"></span> Encerrada</div>
+      <div class="it" style="margin-left:auto">Toque em um dia para ver os detalhes</div>
+    </div>
+  </div>`;
+}
+
+function agDia(iso){
+  const day=agParse(iso);
+  const camps=(window.__AGCAMPS||[]).filter(c=>{const d=agSod(day);return d>=agSod(agParse(c.data_inicio))&&d<=agSod(agParse(c.data_fim));})
+    .sort((a,b)=>({live:0,sched:1,paused:2,done:3}[agStatus(a)])-({live:0,sched:1,paused:2,done:3}[agStatus(b)]));
+  const label=day.toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'});
+  const titulo=label.charAt(0).toUpperCase()+label.slice(1);
+  const stTxt={live:'No ar',sched:'Agendada',paused:'Pausada',done:'Encerrada'};
+  let body;
+  if(!camps.length){ body=`<div class="empty"><b>Nenhuma campanha neste dia</b>Os dias com campanha aparecem com uma barra colorida na agenda.</div>`; }
+  else{
+    body='<div class="ag-sched-modal">'+camps.map(c=>{
+      const st=agStatus(c);
+      const di=c.data_inicio.split('-').reverse().join('/'), df=c.data_fim.split('-').reverse().join('/');
+      const hotel=c.accounts?c.accounts.nome:(window.CLI_ACC?CLI_ACC.nome:'');
+      return `<div class="ag-cd"><div class="ct"><span class="badge ${st}">${st==='live'?'● ':''}${stTxt[st]}</span>
+        <span class="nm">${(c.nome||'').replace(/</g,'&lt;')}</span></div>
+        <div class="meta">
+          <div>Período<b>${di} → ${df}</b></div>
+          <div>Frequência<b>1 a cada ${c.frequencia_a_cada}</b></div>
+          ${hotel?`<div>Hotel<b>${hotel}</b></div>`:''}
+        </div></div>`;
+    }).join('')+'</div>';
+  }
+  abrirModal(`<h3>${titulo}</h3>${body}<div class="fbtns"><button class="ghost" onclick="fecharModal()">Fechar</button></div>`);
 }
 
 /* ---- Modal genérico ---- */
