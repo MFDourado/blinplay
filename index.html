@@ -635,31 +635,34 @@ const VIEWS = {
   },
   async estacoes(){
     const { data: chs, error } = await sb.from('channels')
-      .select('id,nome,descricao,device_token,ativo,last_seen_at,player_version,account_id,accounts(nome,cnpj)')
+      .select('id,nome,descricao,device_token,codigo_curto,ativo,last_seen_at,player_version,account_id,accounts(nome,cnpj)')
       .order('created_at',{ascending:true});
     if(error) throw error;
     let rows;
     if(!chs || chs.length===0){
-      rows='<tr><td colspan="5"><div class="empty"><b>Nenhuma estação ainda</b>Cadastre uma conta primeiro, depois adicione os canais (boxes) dela.</div></td></tr>';
+      rows='<tr><td colspan="6"><div class="empty"><b>Nenhuma estação ainda</b>Cadastre uma conta primeiro, depois adicione os canais (boxes) dela.</div></td></tr>';
     } else {
       rows=chs.map(c=>{
         const online = c.last_seen_at && (Date.now()-new Date(c.last_seen_at).getTime() < 5*60*1000);
         const visto = c.last_seen_at ? tempoRel(c.last_seen_at) : 'nunca';
         const url = location.origin+location.pathname.replace(/index\.html$/,'')+'player.html?token='+c.device_token;
+        const cod = c.codigo_curto||'—';
         return `<tr class="row">
           <td><div class="est-name">${c.accounts?c.accounts.nome:'—'}</div><div class="est-sub">Canal: ${c.nome}</div></td>
           <td><span class="stat ${online?'on':'off'}"><span class="dot ${online?'on':'off'}"></span>${online?'Online':'Offline'}</span></td>
+          <td><span style="font-family:monospace;font-size:18px;letter-spacing:2px;color:var(--gold,#F5A800);font-weight:700">${cod}</span></td>
           <td style="color:var(--mut)">${visto}</td>
           <td style="color:var(--mut)">${c.player_version||'—'}</td>
           <td style="white-space:nowrap">
-            <button class="mini" onclick="copiarURL('${url}')">⧉ Copiar URL</button>
+            <button class="mini" onclick="copiarCodigo('${cod}')">⧉ Copiar código</button>
+            <button class="mini" onclick="copiarURL('${url}')">⧉ URL</button>
             <button class="mini danger" onclick="alert('Reboot remoto: liga no Fully no próximo passo')">⟳ Reboot</button>
           </td></tr>`;
       }).join('');
     }
-    return topbar('Estações & Canais','1 box ZTE = 1 canal. A URL identifica a estação no player.', `<button class="solid" onclick="novaEstacao()">＋ Nova estação</button>`)
+    return topbar('Estações & Canais','1 box = 1 canal. Use o código de 6 dígitos no app BlinPlay do box.', `<button class="solid" onclick="novaEstacao()">＋ Nova estação</button>`)
     +`<div class="panel"><div class="panel-h"><h3>Estações</h3><span class="hint">online = visto nos últimos 5 min</span></div>
-      <table><thead><tr><th>Hotel / Canal</th><th>Status</th><th>Último acesso</th><th>Versão</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+      <table><thead><tr><th>Hotel / Canal</th><th>Status</th><th>Código</th><th>Último acesso</th><th>Versão</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
   },
   async midia(){
     const { data: meds, error } = await sb.from('media')
@@ -958,6 +961,11 @@ function copiarURL(url){
   navigator.clipboard.writeText(url).then(()=>{
     alert('URL do player copiada:\n\n'+url+'\n\nCole esta URL no Fully Kiosk do box.');
   }).catch(()=>prompt('Copie a URL do player:',url));
+}
+function copiarCodigo(cod){
+  navigator.clipboard.writeText(cod).then(()=>{
+    alert('Código copiado: '+cod+'\n\nDigite estes 6 dígitos no app BlinPlay do box.');
+  }).catch(()=>prompt('Código da estação:',cod));
 }
 
 /* ---- Agenda (calendário de campanhas) ---- */
