@@ -49,7 +49,7 @@
 
 <script>
 /* ================= CONFIG ================= */
-const PLAYER_VERSION = 'v2.4';   // versão do player — aparece na coluna VERSÃO do painel
+const PLAYER_VERSION = 'v2.5';   // versão do player — aparece na coluna VERSÃO do painel
 const SB_URL = 'https://wjyaxmbkdjebulosdtds.supabase.co';
 const SB_KEY = 'sb_publishable_mmTZZoQCGe24bTshASUi1w_JKnyU4sv';
 const MEDIA_BASE = SB_URL + '/storage/v1/object/public/blinplay-media/';
@@ -315,16 +315,39 @@ function ligarFallback(){
 }
 
 /* ================= INÍCIO ================= */
-function init(){
+async function init(){
   const params = new URLSearchParams(location.search);
   token = params.get('token');
+  let code = (params.get('code')||'').trim();
+
+  // se o "token" informado for só 6 dígitos, na verdade é um código curto
+  if(!code && token && /^\d{6}$/.test(token.trim())){ code = token.trim(); token = null; }
+
+  sb = window.supabase.createClient(SB_URL, SB_KEY);
+
+  // se veio por código curto (6 dígitos), resolve pro token real
+  if(!token && code){
+    showMsg('Carregando…', true);
+    let salvoTok = null;
+    try{ salvoTok = localStorage.getItem('blinplay_code_'+code); }catch(e){}
+    try{
+      const { data, error } = await sb.rpc('resolver_codigo', { p_codigo: code });
+      if(!error && data){
+        token = data;
+        try{ localStorage.setItem('blinplay_code_'+code, data); }catch(e){}
+      } else if(salvoTok){
+        token = salvoTok;   // offline: usa o token já resolvido antes
+      }
+    }catch(e){
+      if(salvoTok) token = salvoTok;   // sem rede: cai no cache
+    }
+  }
 
   if(!token){
-    showMsg('Nenhum canal configurado.<br>Abra esta página com o token da estação:<br><br><code>player.html?token=SEU_TOKEN</code>', false);
+    showMsg('Nenhum canal configurado.<br>Abra esta página com o código da estação:<br><br><code>player.html?code=000000</code>', false);
     return;
   }
 
-  sb = window.supabase.createClient(SB_URL, SB_KEY);
   showMsg('Carregando programação…', true);
 
   // registra o Service Worker (cache offline) e cuida da auto-atualização
