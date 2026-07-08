@@ -49,7 +49,7 @@
 
 <script>
 /* ================= CONFIG ================= */
-const PLAYER_VERSION = 'v2.5';   // versão do player — aparece na coluna VERSÃO do painel
+const PLAYER_VERSION = 'v2.6';   // versão do player — aparece na coluna VERSÃO do painel
 const SB_URL = 'https://wjyaxmbkdjebulosdtds.supabase.co';
 const SB_KEY = 'sb_publishable_mmTZZoQCGe24bTshASUi1w_JKnyU4sv';
 const MEDIA_BASE = SB_URL + '/storage/v1/object/public/blinplay-media/';
@@ -148,24 +148,39 @@ function tocar(){
   const slide = document.createElement('div');
   slide.className = 'slide';
   const url = MEDIA_BASE + item.path;
-  let dwell = (item.duracao || 8) * 1000;
 
   if(item.tipo === 'video'){
     const v = document.createElement('video');
     v.src = url; v.muted = true; v.autoplay = true; v.playsInline = true;
     v.preload = 'auto';
-    // quando o vídeo acabar, avança (respeita a duração real do vídeo)
-    v.onended = avancar;
-    v.onerror = ()=> setTimeout(avancar, 1000);
-    slide.appendChild(v);
-    // segurança: se o vídeo travar, avança pela duração informada + folga
-    dwell = (item.duracao || 30) * 1000 + 4000;
     slide.dataset.video = '1';
+
+    // AVANÇO NORMAL: o vídeo toca inteiro e avança sozinho ao terminar.
+    // Nunca usamos a duração cadastrada no banco para vídeo — ela costuma ser
+    // menor que o arquivo e cortava o vídeo no meio. Quem manda é o vídeo.
+    v.onended = avancar;
+    v.onerror = ()=> { clearTimeout(slideTimer); setTimeout(avancar, 1000); };
+
+    // REDE DE SEGURANÇA (só contra travamento): quando o navegador descobre a
+    // duração REAL do arquivo, armamos um timer de "duração real + 5s". Se o
+    // vídeo travar por rede e o onended nunca chegar, o player desiste depois
+    // desse tempo. Em uso normal o onended dispara antes e cancela este timer.
+    v.onloadedmetadata = ()=>{
+      clearTimeout(slideTimer);
+      const durReal = (isFinite(v.duration) && v.duration > 0) ? v.duration : (item.duracao || 30);
+      slideTimer = setTimeout(avancar, (durReal * 1000) + 5000);
+    };
+    // se os metadados demorarem a carregar, um teto provisório evita travar a tela
+    slideTimer = setTimeout(avancar, ((item.duracao || 30) * 1000) + 15000);
+
+    slide.appendChild(v);
   } else {
     const im = document.createElement('img');
     im.src = url;
-    im.onerror = ()=> setTimeout(avancar, 1000);
+    im.onerror = ()=> { clearTimeout(slideTimer); setTimeout(avancar, 1000); };
     slide.appendChild(im);
+    // IMAGEM: usa a duração definida no painel (duracao_seg), padrão 8s se nula
+    slideTimer = setTimeout(avancar, (item.duracao || 8) * 1000);
   }
 
   stage.appendChild(slide);
@@ -178,10 +193,6 @@ function tocar(){
 
   // limpa slides antigos (mantém só os 2 últimos pra transição suave)
   while(stage.children.length > 2) stage.removeChild(stage.firstChild);
-
-  // agenda avanço (vídeo avança no onended; imagem/segurança pelo timer)
-  if(!slide.dataset.video) slideTimer = setTimeout(avancar, dwell);
-  else slideTimer = setTimeout(avancar, dwell); // fallback de segurança
 }
 
 function avancar(){
