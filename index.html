@@ -1239,6 +1239,14 @@ function val(id){ const e=document.getElementById(id); return e?e.value.trim():'
 /* ---------------- MÍDIA: grade + upload real ---------------- */
 const SB_PUBLIC_BASE = SB_URL + '/storage/v1/object/public/blinplay-media/';
 
+// formata segundos como m:ss (ex: 230 -> "3:50"). Usado só pra vídeo.
+function fmtDur(seg){
+  seg = parseInt(seg||0,10);
+  if(!seg || seg<1) return '—';
+  const m=Math.floor(seg/60), s=seg%60;
+  return m>0 ? (m+':'+String(s).padStart(2,'0')) : (s+'s');
+}
+
 function mediaPanelReal(list, isAdmin){
   if(!list || list.length===0){
     return `<div class="panel"><div class="empty"><b>Nenhuma mídia ainda</b>Clique em “Subir mídia” para enviar sua primeira imagem ou vídeo.</div></div>`;
@@ -1257,7 +1265,7 @@ function mediaPanelReal(list, isAdmin){
       </div>
       <div class="minfo">
         <div class="mt">${m.nome}</div>
-        <div class="ms">${isVid? m.duracao_seg+'s' : m.duracao_seg+'s na tela'}${tam?' · '+tam:''}${isAdmin&&m.accounts?' · '+m.accounts.nome:''}</div>
+        <div class="ms">${isVid? fmtDur(m.duracao_seg) : m.duracao_seg+'s na tela'}${tam?' · '+tam:''}${isAdmin&&m.accounts?' · '+m.accounts.nome:''}</div>
         <div class="mactions">
           <button class="mini" onclick="editarMidia('${m.id}','${(m.nome||'').replace(/'/g,"\\'")}',${m.duracao_seg},'${m.tipo}')">✎ Editar</button>
           <button class="mini danger" onclick="excluirMidia('${m.id}','${m.storage_path}','${(m.nome||'').replace(/'/g,"\\'")}')">🗑 Excluir</button>
@@ -1331,7 +1339,7 @@ async function progEditor(chId){
                     :`<img src="${url}" loading="lazy" style="width:100%;height:100%;object-fit:cover">`;
     return `<div class="pl-item">
       <div class="pl-th">${th}</div>
-      <div class="pl-meta"><div class="pl-nm">${m.nome}</div><div class="pl-sub">${isVid?'vídeo':m.duracao_seg+'s'}</div></div>
+      <div class="pl-meta"><div class="pl-nm">${m.nome}</div><div class="pl-sub">${isVid?'vídeo · '+fmtDur(m.duracao_seg):m.duracao_seg+'s'}</div></div>
       <button class="mini" onclick="addToProg('${chId}','${ch.account_id}','${m.id}')">＋ Incluir</button>
     </div>`;
   }).join('') : '<div class="empty" style="padding:30px"><b>Tudo já está no ar</b>Todas as mídias desta conta já estão na programação.</div>';
@@ -1345,7 +1353,7 @@ async function progEditor(chId){
     return `<div class="pl-item">
       <div class="pl-ord">${i+1}</div>
       <div class="pl-th">${th}</div>
-      <div class="pl-meta"><div class="pl-nm">${m.nome}</div><div class="pl-sub">${isVid?'vídeo':m.duracao_seg+'s'}</div></div>
+      <div class="pl-meta"><div class="pl-nm">${m.nome}</div><div class="pl-sub">${isVid?'vídeo · '+fmtDur(m.duracao_seg):m.duracao_seg+'s'}</div></div>
       <div class="pl-btns">
         <button class="mini" onclick="moveProg('${it.id}',-1)" ${i===0?'disabled':''}>↑</button>
         <button class="mini" onclick="moveProg('${it.id}',1)" ${i===items.length-1?'disabled':''}>↓</button>
@@ -1580,6 +1588,28 @@ function previewMidia(input){
   if(durWrap) durWrap.style.display = f.type.startsWith('video') ? 'none' : 'block';
 }
 
+// Lê a duração REAL de um vídeo no navegador, antes do upload.
+// Cria um <video> temporário só pra pegar os metadados. Retorna segundos
+// arredondados, ou null se o navegador não conseguir ler (aí usamos fallback).
+function lerDuracaoVideo(file){
+  return new Promise((resolve)=>{
+    try{
+      const v=document.createElement('video');
+      v.preload='metadata';
+      let resolvido=false;
+      const fim=(val)=>{ if(resolvido) return; resolvido=true; try{ URL.revokeObjectURL(v.src); }catch(e){} resolve(val); };
+      v.onloadedmetadata=()=>{
+        const d=v.duration;
+        fim(isFinite(d)&&d>0 ? Math.round(d) : null);
+      };
+      v.onerror=()=> fim(null);
+      // trava de segurança: se em 8s não leu, segue com fallback
+      setTimeout(()=> fim(null), 8000);
+      v.src=URL.createObjectURL(file);
+    }catch(e){ resolve(null); }
+  });
+}
+
 async function salvarMidia(){
   const account_id=val('nm_acc'), nome=val('nm_nome');
   const fileEl=document.getElementById('nm_file');
@@ -1590,9 +1620,20 @@ async function salvarMidia(){
   if(f.size > 50*1048576){ msg.className='fmsg err'; msg.textContent='Arquivo acima de 50 MB.'; return; }
   const isVid=f.type.startsWith('video');
   const tipo=isVid?'video':'image';
-  const dur = isVid ? 30 : parseInt(val('nm_dur')||'8',10);
 
-  btn.disabled=true; msg.className='fmsg'; msg.textContent='Enviando arquivo…';
+  btn.disabled=true; msg.className='fmsg';
+
+  // duração: vídeo lê a real do arquivo; imagem usa o campo "tempo na tela"
+  let dur;
+  if(isVid){
+    msg.textContent='Lendo duração do vídeo…';
+    const real = await lerDuracaoVideo(f);
+    dur = (real && real >= 1) ? real : 30;  // 30 só como fallback se não conseguir ler
+  } else {
+    dur = parseInt(val('nm_dur')||'8',10);
+  }
+
+  msg.textContent='Enviando arquivo…';
   try{
     // caminho: {account_id}/{timestamp}_{nome-limpo}.{ext}
     const ext=(f.name.split('.').pop()||'bin').toLowerCase();
