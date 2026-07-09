@@ -49,7 +49,7 @@
 
 <script>
 /* ================= CONFIG ================= */
-const PLAYER_VERSION = 'v2.6';   // versão do player — aparece na coluna VERSÃO do painel
+const PLAYER_VERSION = 'v2.7';   // versão do player — aparece na coluna VERSÃO do painel
 const SB_URL = 'https://wjyaxmbkdjebulosdtds.supabase.co';
 const SB_KEY = 'sb_publishable_mmTZZoQCGe24bTshASUi1w_JKnyU4sv';
 const MEDIA_BASE = SB_URL + '/storage/v1/object/public/blinplay-media/';
@@ -141,6 +141,9 @@ function tocar(){
   }
   hideMsg();
   clearTimeout(slideTimer);
+  // encerra timers/intervalos do vídeo anterior (watchdog e vigia de travamento)
+  if(window.__vidTimers){ window.__vidTimers.forEach(t=> t.tipo==='i' ? clearInterval(t.id) : clearTimeout(t.id)); }
+  window.__vidTimers = [];
   const item = playlist[idx];
   const stage = document.getElementById('stage');
 
@@ -155,25 +158,56 @@ function tocar(){
     v.preload = 'auto';
     slide.dataset.video = '1';
 
-    // AVANÇO NORMAL: o vídeo toca inteiro e avança sozinho ao terminar.
-    // Nunca usamos a duração cadastrada no banco para vídeo — ela costuma ser
-    // menor que o arquivo e cortava o vídeo no meio. Quem manda é o vídeo.
-    v.onended = avancar;
-    v.onerror = ()=> { clearTimeout(slideTimer); setTimeout(avancar, 1000); };
+    // ---------------------------------------------------------------
+    // AVANÇO DE VÍDEO — robusto para WebView de Android TV (Fully Kiosk)
+    //
+    // Regra de ouro: para VÍDEO nunca usamos a duração cadastrada no banco
+    // (duracao_seg). Ela costuma ser um valor placeholder (ex: 30) e cortava
+    // o vídeo no meio. Quem manda é o próprio vídeo, via evento 'ended'.
+    //
+    // Problema conhecido: o WebView do Android TV às vezes NÃO fornece
+    // video.duration no 'loadedmetadata' (fica Infinity/NaN até o play andar).
+    // Por isso não confiamos em um único evento nem criamos um teto curto.
+    // ---------------------------------------------------------------
+    let watchdog = null;
+    const cancelaWatchdog = ()=>{ if(watchdog){ clearTimeout(watchdog); watchdog = null; } };
 
-    // REDE DE SEGURANÇA (só contra travamento): quando o navegador descobre a
-    // duração REAL do arquivo, armamos um timer de "duração real + 5s". Se o
-    // vídeo travar por rede e o onended nunca chegar, o player desiste depois
-    // desse tempo. Em uso normal o onended dispara antes e cancela este timer.
-    v.onloadedmetadata = ()=>{
-      clearTimeout(slideTimer);
-      const durReal = (isFinite(v.duration) && v.duration > 0) ? v.duration : (item.duracao || 30);
-      slideTimer = setTimeout(avancar, (durReal * 1000) + 5000);
+    // (1) fim natural do vídeo: é o caminho normal de avanço.
+    v.onended = ()=>{ cancelaWatchdog(); avancar(); };
+    v.onerror = ()=>{ cancelaWatchdog(); clearTimeout(slideTimer); setTimeout(avancar, 1000); };
+
+    // (2) quando (e SE) a duração real ficar disponível — pode vir em
+    // loadedmetadata, durationchange ou já durante o playback — armamos um
+    // watchdog de "duração real + 5s" só como proteção contra travamento.
+    const tentaArmarPorDuracao = ()=>{
+      if(isFinite(v.duration) && v.duration > 0){
+        cancelaWatchdog();
+        watchdog = setTimeout(()=>{ avancar(); }, (v.duration * 1000) + 5000);
+        window.__vidTimers.push({ tipo:'t', id: watchdog });
+      }
     };
-    // se os metadados demorarem a carregar, um teto provisório evita travar a tela
-    slideTimer = setTimeout(avancar, ((item.duracao || 30) * 1000) + 15000);
+    v.addEventListener('loadedmetadata', tentaArmarPorDuracao);
+    v.addEventListener('durationchange', tentaArmarPorDuracao);
+    v.addEventListener('playing', tentaArmarPorDuracao);
+
+    // (3) WATCHDOG DE TRAVAMENTO (independe da duração do banco):
+    // se o tempo do vídeo parar de avançar por muito tempo (rede caiu, arquivo
+    // corrompido) e o 'ended' nunca chegar, pulamos o item. Enquanto o vídeo
+    // estiver progredindo, o relógio é rearmado — então vídeo longo toca inteiro.
+    let ultimoTempo = 0, paradoDesde = Date.now();
+    v.addEventListener('timeupdate', ()=>{
+      if(v.currentTime > ultimoTempo + 0.25){ ultimoTempo = v.currentTime; paradoDesde = Date.now(); }
+    });
+    const STALL_MS = 20000; // 20s sem progresso = travou de verdade
+    const vigia = setInterval(()=>{
+      if(!document.body.contains(v)){ clearInterval(vigia); return; }
+      if(Date.now() - paradoDesde > STALL_MS){ clearInterval(vigia); avancar(); }
+    }, 3000);
+    window.__vidTimers.push({ tipo:'i', id: vigia });
 
     slide.appendChild(v);
+    // NÃO armamos setTimeout(avancar) com base em duracao_seg aqui.
+    // O vídeo avança por 'ended' (normal) ou pelo watchdog de travamento.
   } else {
     const im = document.createElement('img');
     im.src = url;
