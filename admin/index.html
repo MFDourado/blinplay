@@ -4,7 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BlinPlay · Admin</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- C3 — biblioteca servida do próprio domínio; a CDN é apenas reserva. -->
+<script src="../config.js"></script>
+<script src="../supabase.js" onerror="this.onerror=null;var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';document.head.appendChild(s);"></script>
 <style>
   :root{ --gold:#F5A800; --dark:#1F2127; --dark2:#171920; --line:#2c2f38; --mut:#8b8f9a; --ok:#27c08a; --bad:#e35d5d; }
   *{box-sizing:border-box} html,body{margin:0}
@@ -110,10 +112,20 @@
 <div id="modalRoot"></div>
 
 <script>
-const SB_URL = "https://wjyaxmbkdjebulosdtds.supabase.co";
-const SB_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndqeWF4bWJrZGplYnVsb3NkdGRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAxMzkxOTksImV4cCI6MjA5NTcxNTE5OX0.SEaQ7V7hibJfVu1fjBaOBt7RIugnWzU2A-uO33aZxWU";
-const FN_URL = SB_URL + "/functions/v1/admin-api";
+/* B4 — SB_URL e a chave vêm de ../config.js, fonte única do repositório.
+   Antes estavam declaradas aqui, e a chave era um JWT no formato antigo
+   enquanto o painel principal já usa o formato publicável. Na próxima
+   rotação, um dos dois lados pararia de conectar sem aviso. */
+const SB_ANON = SB_KEY;                 // nome mantido para o restante do arquivo
+const FN_URL  = SB_URL + "/functions/v1/admin-api";
 
+if(!window.supabase || !window.supabase.createClient){
+  document.body.innerHTML =
+    '<div style="padding:60px;font-family:system-ui">'
+    + '<h2>Não foi possível carregar o painel</h2>'
+    + '<p>A biblioteca do Supabase não carregou. Verifique a conexão e recarregue.</p></div>';
+  throw new Error('SDK Supabase indisponível');
+}
 const sb = window.supabase.createClient(SB_URL, SB_ANON);
 let CUR_TAB = 'resumo';
 let ACCOUNTS = [];   // {id,nome} para formularios
@@ -176,7 +188,15 @@ const V = ()=>document.getElementById('view');
 function loading(){ V().innerHTML='<p style="color:var(--mut)">Carregando…</p>'; }
 function fmtData(s){ if(!s) return '—'; const d=new Date(s); return d.toLocaleString('pt-BR'); }
 function fmtBytes(b){ if(!b) return '0 MB'; return (b/1048576).toFixed(1)+' MB'; }
-function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+/* C5 — faltava a aspa simples. A saída desta função é colocada dentro de
+   atributos onclick delimitados por aspa simples, como
+   resetar('${u.id}','${esc(u.email)}'), então um valor com apóstrofo
+   encerrava a string e o restante virava código. */
+function esc(s){
+  return String(s==null?'':s).replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
 
 /* ---------- RESUMO ---------- */
 async function viewResumo(){
@@ -396,6 +416,9 @@ function exportCSV(tableId, nome){
   const linhas=[...tb.querySelectorAll('tr')].map(tr=>
     [...tr.querySelectorAll('th,td')].map(td=>{
       let txt=td.innerText.replace(/\s+/g,' ').trim();
+      /* M10 — valor iniciado por = + - @ é executado como fórmula ao abrir no
+         Excel. O apóstrofo à frente neutraliza sem alterar o que se lê. */
+      if(/^[=+\-@\t\r]/.test(txt)) txt = "'" + txt;
       return '"'+txt.replace(/"/g,'""')+'"';
     }).join(';')
   ).join('\r\n');
@@ -404,6 +427,8 @@ function exportCSV(tableId, nome){
   a.href=URL.createObjectURL(blob);
   a.download='blinplay_'+nome+'_'+hojeISO()+'.csv';
   a.click();
+  const href = a.href;                    // M9 — revogar no mesmo tick cancela o download
+  setTimeout(()=> URL.revokeObjectURL(href), 0);
 }
 
 /* ---------- auto-login se já houver sessão ---------- */
