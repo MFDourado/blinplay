@@ -166,6 +166,25 @@
   .minfo .mt{font-size:12.5px;font-weight:600}
   .minfo .ms{font-size:11px;color:var(--mut);margin-top:2px}
 
+  /* tela Clientes: lista com busca à esquerda + biblioteca filtrada à direita */
+  .cli-panel{display:grid;grid-template-columns:230px 1fr;gap:0}
+  .cli-side{border-right:1px solid var(--line)}
+  .cli-search{padding:14px}
+  .cli-search-wrap{position:relative}
+  .cli-search-wrap input{width:100%;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);
+    padding:9px 11px 9px 30px;color:var(--txt);font-size:13px;outline:none;transition:.18s}
+  .cli-search-wrap input:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-soft)}
+  .cli-search-ic{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--mut2);font-size:13px}
+  .cli-list{padding:0 8px 14px;display:flex;flex-direction:column;gap:2px;max-height:560px;overflow-y:auto}
+  .cli-row{display:flex;align-items:center;justify-content:space-between;padding:9px 10px;border-radius:var(--rs);
+    color:var(--mut);font-size:13px;cursor:pointer;border:1px solid transparent}
+  .cli-row:hover{background:var(--surf);color:var(--txt)}
+  .cli-row.active{background:var(--gold-soft);color:var(--gold);border-color:rgba(245,168,0,.3)}
+  .cli-row span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cli-row .n{background:#1e1e24;color:var(--mut);font-size:10.5px;padding:1px 7px;border-radius:12px;flex-shrink:0;margin-left:8px}
+  .cli-row.active .n{background:rgba(245,168,0,.18);color:var(--gold)}
+  .cli-empty{padding:14px 10px;color:var(--mut2);font-size:12px;text-align:center}
+
   /* campaign */
   .camp{display:flex;align-items:center;gap:16px;padding:15px 18px;border-bottom:1px solid var(--line)}
   .camp:last-child{border-bottom:0}
@@ -421,6 +440,7 @@ const NAV = {
     {k:'dispositivos', ic:'⌸', label:'Dispositivos'},
     {sec:'CONTEÚDO'},
     {k:'midia',    ic:'▣', label:'Biblioteca de Mídia'},
+    {k:'clientes', ic:'◈', label:'Clientes'},
     {k:'prog',     ic:'☰', label:'Programação dos Canais'},
     {k:'camp',     ic:'◷', label:'Campanhas & Agenda'},
     {sec:'GESTÃO'},
@@ -438,6 +458,16 @@ const NAV = {
 };
 let ROLE='admin', CUR='overview';
 let PROG_CH = null;   // canal aberto no editor de programação
+
+/* Tela "Clientes": lista + busca à esquerda, biblioteca filtrada à direita.
+   MIDIA_CLI_ACCS/MIDIA_CLI_CONT guardam o que foi buscado na renderização
+   atual da tela — recarregados a cada entrada nela (nunca ficam velhos),
+   mas digitar na busca só filtra esse array em memória, sem round-trip. */
+let MIDIA_CLI_SEL   = null;   // account_id escolhido (null = "Todos os clientes")
+let MIDIA_CLI_BUSCA = '';     // texto digitado na busca
+let MIDIA_CLI_ACCS  = null;   // contas ativas carregadas na última entrada na tela
+let MIDIA_CLI_CONT  = {};     // {account_id: quantidade de mídia} da última entrada na tela
+let MIDIA_CLI_TOTAL = 0;      // total geral (todas as contas)
 
 function enter(role){
   COLS_EXTRAS = null;   // B8 — reavalia as colunas opcionais a cada entrada
@@ -585,6 +615,7 @@ function toggleDemo(){ /* removido */ }
 async function logout(){
   try{ if(sb) await sb.auth.signOut(); }catch(e){}
   CLI_ACC=null; CLI_ACCS=[]; PROG_CH=null;
+  MIDIA_CLI_SEL=null; MIDIA_CLI_BUSCA=''; MIDIA_CLI_ACCS=null; MIDIA_CLI_CONT={}; MIDIA_CLI_TOTAL=0;
   document.getElementById('app').classList.remove('show');
   document.getElementById('login').classList.remove('hidden');
   document.getElementById('pass').value='';
@@ -625,6 +656,9 @@ async function render(){
     const html = await fn();
     if(meu !== RENDER_TOKEN || alvo !== CUR) return;   // superada
     view.innerHTML = html;
+    // a busca de cliente atualiza #cliList via JS puro (sem re-render),
+    // pra digitar não fazer o campo de texto perder o foco a cada letra
+    if(alvo==='clientes') renderListaClientes(MIDIA_CLI_BUSCA);
   }
   catch(e){ view.innerHTML='<div class="note" style="background:rgba(244,96,107,.1);border-color:rgba(244,96,107,.3);color:#ffb3ba">Erro ao carregar: '+(e.message||e)+'</div>'; }
 }
@@ -848,6 +882,40 @@ const VIEWS = {
     if(error) throw error;
     return topbar('Biblioteca de Mídia','Todas as contas · '+(meds?meds.length:0)+' item(ns)', `<button class="solid" onclick="novaMidia()">⬆ Subir mídia</button>`)
       + mediaPanelReal(meds, true);
+  },
+  async clientes(){
+    // contas: busca de novo a cada entrada na tela (senão uma conta criada
+    // agora só apareceria depois de logout/login) — o cache só evita refetch
+    // a cada tecla digitada na busca, que nunca dispara fetch nenhum, já que
+    // o filtro roda em cima do array já carregado nesta renderização
+    const { data: accsData, error: aErr } = await sb.from('accounts').select('id,nome').eq('ativo',true).order('nome');
+    if(aErr) throw aErr;
+    MIDIA_CLI_ACCS = accsData || [];
+    // mídia: sempre busca de novo (é o dado que muda), já traz o nome da conta
+    const { data: meds, error: mErr } = await sb.from('media')
+      .select('id,nome,tipo,storage_path,duracao_seg,tamanho_bytes,account_id,accounts(nome)')
+      .order('created_at',{ascending:false});
+    if(mErr) throw mErr;
+    MIDIA_CLI_CONT = {};
+    meds.forEach(m=> MIDIA_CLI_CONT[m.account_id] = (MIDIA_CLI_CONT[m.account_id]||0)+1 );
+    MIDIA_CLI_TOTAL = meds.length;
+
+    const medsFiltrados = MIDIA_CLI_SEL ? meds.filter(m=>m.account_id===MIDIA_CLI_SEL) : meds;
+    const nomeSel = esc(MIDIA_CLI_SEL ? (MIDIA_CLI_ACCS.find(a=>a.id===MIDIA_CLI_SEL)||{}).nome||'—' : 'Todos os clientes');
+
+    return topbar('Clientes', nomeSel+' · '+medsFiltrados.length+' item(ns)', `<button class="solid" onclick="novaMidia()">⬆ Subir mídia</button>`)
+      + `<div class="panel cli-panel">
+          <div class="cli-side">
+            <div class="cli-search">
+              <div class="cli-search-wrap">
+                <span class="cli-search-ic">⌕</span>
+                <input id="cliBusca" placeholder="Buscar cliente" value="${escA(MIDIA_CLI_BUSCA)}" oninput="renderListaClientes(this.value)">
+              </div>
+            </div>
+            <div class="cli-list" id="cliList"></div>
+          </div>
+          <div class="mgrid" id="cliGrid">${mediaCardsHtml(medsFiltrados, !MIDIA_CLI_SEL)}</div>
+        </div>`;
   },
   async prog(){
     // se um canal está selecionado, mostra o editor; senão, a lista de canais
@@ -1564,11 +1632,13 @@ function fmtDur(seg){
   return m>0 ? (m+':'+String(s).padStart(2,'0')) : (s+'s');
 }
 
-function mediaPanelReal(list, isAdmin){
+// gera só os cards (sem o .panel em volta) — reaproveitado pela Biblioteca
+// de Mídia normal e pela tela Clientes, que já tem seu próprio wrapper
+function mediaCardsHtml(list, isAdmin){
   if(!list || list.length===0){
-    return `<div class="panel"><div class="empty"><b>Nenhuma mídia ainda</b>Clique em “Subir mídia” para enviar sua primeira imagem ou vídeo.</div></div>`;
+    return `<div class="empty" style="grid-column:1/-1"><b>Nenhuma mídia ainda</b>Clique em “Subir mídia” para enviar sua primeira imagem ou vídeo.</div>`;
   }
-  const cards=list.map(m=>{
+  return list.map(m=>{
     const url = SB_PUBLIC_BASE + m.storage_path;
     const isVid = m.tipo==='video';
     const thumb = isVid
@@ -1590,7 +1660,41 @@ function mediaPanelReal(list, isAdmin){
       </div>
     </div>`;
   }).join('');
-  return `<div class="panel"><div class="panel-h"><h3>Biblioteca</h3><span class="hint">o player faz cache local no box</span></div><div class="mgrid">${cards}</div></div>`;
+}
+
+function mediaPanelReal(list, isAdmin){
+  if(!list || list.length===0){
+    return `<div class="panel"><div class="empty"><b>Nenhuma mídia ainda</b>Clique em “Subir mídia” para enviar sua primeira imagem ou vídeo.</div></div>`;
+  }
+  return `<div class="panel"><div class="panel-h"><h3>Biblioteca</h3><span class="hint">o player faz cache local no box</span></div><div class="mgrid">${mediaCardsHtml(list, isAdmin)}</div></div>`;
+}
+
+/* ---------------- MÍDIA: tela Clientes (lista + busca) ---------------- */
+function linhaCliente(id, nome, count, ativa){
+  return `<div class="cli-row ${ativa?'active':''}" onclick="selecionarClienteMidia(${id===null?'null':`'${id}'`})">
+    <span>${esc(nome)}</span><span class="n">${count}</span></div>`;
+}
+
+// Redesenha só a lista de clientes (#cliList), sem tocar no <input> de busca
+// nem no grid — assim digitar não refaz a consulta no banco nem tira o foco.
+function renderListaClientes(valor){
+  MIDIA_CLI_BUSCA = valor;
+  const el = document.getElementById('cliList');
+  if(!el) return;
+  const q = valor.trim().toLowerCase();
+  const contas = (MIDIA_CLI_ACCS||[]).filter(a=> (a.nome||'').toLowerCase().includes(q));
+  let html = '';
+  if(!q) html += linhaCliente(null, 'Todos os clientes', MIDIA_CLI_TOTAL, MIDIA_CLI_SEL===null);
+  html += contas.map(a=> linhaCliente(a.id, a.nome, MIDIA_CLI_CONT[a.id]||0, MIDIA_CLI_SEL===a.id)).join('');
+  if(q && contas.length===0) html += '<div class="cli-empty">Nenhum cliente encontrado</div>';
+  el.innerHTML = html;
+}
+
+// Selecionar cliente já refaz a mídia (o dado que realmente muda), então
+// aqui sim vale a pena passar pelo render() normal da tela.
+function selecionarClienteMidia(id){
+  MIDIA_CLI_SEL = id;
+  render();
 }
 
 async function excluirMidia(id, path, nome){
