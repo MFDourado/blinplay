@@ -1104,6 +1104,46 @@ const VIEWS = {
     return topbar('Minha Mídia', CLI_ACC.nome+' · '+(meds?meds.length:0)+' item(ns)', `<button class="solid" onclick="novaMidia()">⬆ Subir mídia</button>`)
       + mediaPanelReal(meds, false);
   },
+  async cli_camp(){
+    // "Minhas Campanhas" no menu do cliente apontava pra uma tela que nunca
+    // foi implementada (só existia cli_prog/cli_midia/cli_canais) — o item
+    // caía no fallback genérico do render() e mostrava só um "—" vazio.
+    // Mesma lógica de camp() (admin), só filtrada pela conta do cliente e
+    // sem repetir o nome dela em cada campanha (já sabe qual conta é a dela).
+    if(!CLI_ACC) return '';
+    const hoje = new Date().toISOString().slice(0,10);
+    const { data: camps, error } = await sb.from('campaigns')
+      .select('id,nome,data_inicio,data_fim,frequencia_a_cada,ativo,account_id')
+      .eq('account_id', CLI_ACC.id)
+      .order('data_inicio',{ascending:false});
+    if(error) throw error;
+    let rows;
+    if(!camps || camps.length===0){
+      rows = `<div class="empty"><b>Nenhuma campanha ainda</b>Crie uma campanha temporária (ex: Dia das Mães) que sobe e sai sozinha por data.</div>`;
+    } else {
+      rows = camps.map(c=>{
+        let st, badge;
+        if(!c.ativo){ st='Pausada'; badge='paused'; }
+        else if(hoje < c.data_inicio){ st='Agendada'; badge='sched'; }
+        else if(hoje > c.data_fim){ st='Encerrada'; badge='done'; }
+        else { st='No ar'; badge='live'; }
+        const di=dataBR(c.data_inicio);
+        const df=dataBR(c.data_fim);
+        return `<div class="camp">
+          <div class="camp-ic" style="background:rgba(245,168,0,.18);border:1px solid rgba(245,168,0,.4)">◷</div>
+          <div class="camp-main"><div class="cn">${esc(c.nome)}</div><div class="cd">${di} → ${df}</div></div>
+          <span class="freq">1 a cada ${esc(c.frequencia_a_cada)}</span>
+          <span class="badge ${badge}">${badge==='live'?'● ':''}${st}</span>
+          <button class="mini" onclick="togglePausaCampanha('${c.id}',${esc(c.ativo)})">${c.ativo?'⏸ Pausar':'▶ Retomar'}</button>
+          <button class="mini" onclick="editarCampanha('${c.id}')">Editar</button>
+          <button class="mini danger" onclick="excluirCampanha('${c.id}','${escJ(c.nome)}')">Excluir</button>
+        </div>`;
+      }).join('');
+    }
+    return topbar('Minhas Campanhas', CLI_ACC.nome+' · entra no rodízio no período, sai sozinha quando a data passa', `<button class="solid" onclick="novaCampanha()">＋ Nova campanha</button>`)
+      + agendaPanel(camps||[])
+      + `<div class="panel"><div class="panel-h"><h3>Campanhas</h3><span class="hint">rodízio: padrão · padrão · campanha · padrão…</span></div>${rows}</div>`;
+  },
   async cli_canais(){
     if(!CLI_ACC) return '';
     const { data: chs, error } = await sb.from('channels')
@@ -1966,12 +2006,20 @@ async function editarCampanha(id){
     sb.from('campaign_items').select('media_id').eq('campaign_id',id),
     sb.from('campaign_channels').select('channel_id').eq('campaign_id',id)
   ]);
-  const { data: accs } = await sb.from('accounts').select('id,nome').eq('ativo',true).order('nome');
-  const opts=accs.map(a=>`<option value="${a.id}" ${a.id===c.account_id?'selected':''}>${esc(a.nome)}</option>`).join('');
+  let accField;
+  if(ROLE==='cli' && CLI_ACC){
+    // cliente: mostra só o próprio hotel, sem listar as contas de outros clientes
+    accField = `<input type="hidden" id="cp_acc" value="${CLI_ACC.id}">
+      <div class="fld"><label>Conta (hotel)</label><input value="${escA(CLI_ACC.nome)}" disabled></div>`;
+  } else {
+    const { data: accs } = await sb.from('accounts').select('id,nome').eq('ativo',true).order('nome');
+    const opts=accs.map(a=>`<option value="${a.id}" ${a.id===c.account_id?'selected':''}>${esc(a.nome)}</option>`).join('');
+    accField = `<div class="fld"><label>Conta (hotel)</label><select id="cp_acc" disabled>${opts}</select></div>`;
+  }
   abrirModal(`
     <h3>Editar campanha</h3>
     <div class="fsub">Conta fixa. Ajuste datas, frequência, mídias e canais.</div>
-    <div class="fld"><label>Conta (hotel)</label><select id="cp_acc" disabled>${opts}</select></div>
+    ${accField}
     <div class="fld"><label>Nome da campanha</label><input id="cp_nome" value="${escA(c.nome)}"></div>
     <div style="display:flex;gap:10px">
       <div class="fld" style="flex:1"><label>Início</label><input id="cp_ini" type="date" value="${escA(c.data_inicio)}"></div>
