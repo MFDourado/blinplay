@@ -738,7 +738,7 @@ const VIEWS = {
         <td style="color:var(--mut);font-size:12px">${pct!==null ? pct+'%<div class="est-sub">'+gb(c.storage_livre)+' livre</div>' : '—'}</td>
         <td><span class="stat ${on?'on':'off'}"><span class="dot ${on?'on':'off'}"></span>${on?'Online':'Offline'}</span>
             <div class="est-sub">${esc(c.player_version||'—')}</div></td>
-        <td style="color:var(--mut);font-size:12px;max-width:180px">${esc(c.observacao||'<span style="color:#4a4a52">—</span>')}</td>
+        <td style="color:var(--mut);font-size:12px;max-width:180px">${c.observacao ? esc(c.observacao) : '<span style="color:#4a4a52">—</span>'}</td>
         <td style="white-space:nowrap">
           <button class="mini" onclick='editarInventario("${c.id}","${nomeEsc}")'>✎ Editar</button>
         </td>
