@@ -1724,7 +1724,7 @@ function renderListaClientes(valor){
   const q = valor.trim().toLowerCase();
   const contas = (MIDIA_CLI_ACCS||[]).filter(a=> (a.nome||'').toLowerCase().includes(q));
   let html = '';
-  if(!q) html += linhaCliente(null, 'Todos os clientes', MIDIA_CLI_TOTAL, MIDIA_CLI_SEL===null);
+  if(!q) html += linhaCliente(null, 'Todos os clientes', (MIDIA_CLI_ACCS||[]).length, MIDIA_CLI_SEL===null);
   html += contas.map(a=> linhaCliente(a.id, a.nome, MIDIA_CLI_CONT[a.id]||0, MIDIA_CLI_SEL===a.id)).join('');
   if(q && contas.length===0) html += '<div class="cli-empty">Nenhum cliente encontrado</div>';
   el.innerHTML = html;
@@ -2378,7 +2378,7 @@ async function novaMidia(){
   } else {
     const { data: accs } = await sb.from('accounts').select('id,nome').eq('ativo',true).order('nome');
     if(!accs || accs.length===0){ alert('Cadastre uma conta (hotel) antes de subir mídia.'); return; }
-    const opts=accs.map(a=>`<option value="${a.id}">${esc(a.nome)}</option>`).join('');
+    const opts=accs.map(a=>`<option value="${a.id}"${a.id===MIDIA_CLI_SEL?' selected':''}>${esc(a.nome)}</option>`).join('');
     accSelect = `<div class="fld"><label>Conta (hotel)</label><select id="nm_acc">${opts}</select></div>`;
   }
   abrirModal(`
