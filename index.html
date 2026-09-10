@@ -1672,6 +1672,28 @@ function fmtDur(seg){
   return m>0 ? (m+':'+String(s).padStart(2,'0')) : (s+'s');
 }
 
+// baixa o arquivo (fetch + blob) em vez de um <a download> puro: como o
+// arquivo está noutra origem (Supabase Storage), o atributo download sozinho
+// é ignorado por vários navegadores e o clique só abre a mídia numa aba nova.
+async function baixarMidia(url, nome, path){
+  const ext = (path && path.match(/\.[a-z0-9]+$/i)) ? path.match(/\.[a-z0-9]+$/i)[0] : '';
+  const nomeArquivo = (nome||'midia').replace(/[\\/:*?"<>|]/g,'_') + ext;
+  try{
+    const resp = await fetch(url);
+    if(!resp.ok) throw new Error('HTTP '+resp.status);
+    const blob = await resp.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = nomeArquivo;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=> URL.revokeObjectURL(a.href), 10000);
+  }catch(e){
+    alert('Não foi possível baixar "'+nome+'": '+(e.message||e));
+  }
+}
+
 // gera só os cards (sem o .panel em volta) — reaproveitado pela Biblioteca
 // de Mídia normal e pela tela Clientes, que já tem seu próprio wrapper
 function mediaCardsHtml(list, isAdmin){
@@ -1694,6 +1716,7 @@ function mediaCardsHtml(list, isAdmin){
         <div class="mt">${esc(m.nome)}</div>
         <div class="ms">${isVid? fmtDur(m.duracao_seg) : (m.duracao_seg!=null ? m.duracao_seg+'s na tela' : 'imagem')}${tam?' · '+tam:''}${isAdmin&&m.accounts?' · '+esc(m.accounts.nome):''}</div>
         <div class="mactions">
+          <button class="mini" onclick="baixarMidia('${escJ(url)}','${escJ(m.nome)}','${escJ(m.storage_path)}')">⬇ Baixar</button>
           <button class="mini" onclick="editarMidia('${m.id}','${escJ(m.nome)}',${esc(m.duracao_seg)},'${m.tipo}')">✎ Editar</button>
           <button class="mini danger" onclick="excluirMidia('${m.id}','${escJ(m.storage_path)}','${escJ(m.nome)}')">🗑 Excluir</button>
         </div>
