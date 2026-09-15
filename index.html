@@ -226,6 +226,13 @@
   .pseq b{color:var(--gold)}
   .chip{font-size:10.5px;padding:3px 8px;border-radius:6px;border:1px solid var(--line);color:var(--mut)}
   .chip.camp{border-color:rgba(245,168,0,.4);color:var(--gold)}
+  .est-tabs{display:flex;gap:8px;padding:0 20px 14px;flex-wrap:wrap}
+  .est-tab{background:var(--surf2);border:1px solid var(--line);color:var(--mut);border-radius:999px;
+    padding:7px 14px;font-size:12.5px;font-weight:600;display:inline-flex;align-items:center;gap:7px;transition:.13s}
+  .est-tab:hover{border-color:var(--gold);color:var(--txt)}
+  .est-tab.active{background:var(--gold-soft);border-color:rgba(245,168,0,.4);color:var(--gold)}
+  .est-tab .n{background:rgba(255,255,255,.08);border-radius:999px;padding:1px 7px;font-size:11px;color:var(--txt)}
+  .est-tab.active .n{background:rgba(245,168,0,.22);color:var(--gold)}
 
   @media(max-width:820px){
     #app.show{grid-template-columns:1fr}
@@ -456,7 +463,63 @@ const NAV = {
     {k:'cli_canais',ic:'▤',label:'Meus Canais'},
   ]
 };
+let EST_CHS = [], EST_NPL = {}, EST_FILTRO = 'todos';
 let ROLE='admin', CUR='overview';
+
+function canalOnline(c){
+  return estaOnline(c.last_seen_at);
+}
+
+function estTabsHtml(){
+  const total = EST_CHS.length;
+  const nOn = EST_CHS.filter(canalOnline).length;
+  const nOff = total - nOn;
+  const tab=(chave,label,n)=> `<button class="est-tab ${EST_FILTRO===chave?'active':''}" onclick="filtrarEstacoes('${chave}')">${label} <span class="n">${n}</span></button>`;
+  return tab('todos','Todas',total)+tab('online','Online',nOn)+tab('offline','Offline',nOff);
+}
+
+function linhasEstacoes(){
+  let list = EST_CHS;
+  if(EST_FILTRO==='online') list = list.filter(canalOnline);
+  else if(EST_FILTRO==='offline') list = list.filter(c=>!canalOnline(c));
+
+  if(!EST_CHS.length){
+    return '<tr><td colspan="6"><div class="empty"><b>Nenhuma estação ainda</b>Cadastre uma conta primeiro, depois adicione os canais (boxes) dela.</div></td></tr>';
+  }
+  if(!list.length){
+    const rotulo = EST_FILTRO==='online' ? 'online' : 'offline';
+    return `<tr><td colspan="6"><div class="empty"><b>Nenhum box ${rotulo} agora</b></div></td></tr>`;
+  }
+  return list.map(c=>{
+    const online = canalOnline(c);
+    const visto = c.last_seen_at ? tempoRel(c.last_seen_at) : 'nunca';
+    const url = location.origin+location.pathname.replace(/index\.html$/,'')+'player.html?token='+c.device_token;
+    const cod = c.codigo_curto||'—';
+    const nProg = EST_NPL[c.id] || 0;
+    return `<tr class="row" style="${c.ativo?'':'opacity:.5'}">
+      <td><div class="est-name">${esc(c.accounts?c.accounts.nome:'—')}</div><div class="est-sub">Canal: ${esc(c.nome)}</div></td>
+      <td><span class="stat ${online?'on':'off'}"><span class="dot ${online?'on':'off'}"></span>${online?'Online':'Offline'}</span></td>
+      <td><span style="font-family:monospace;font-size:18px;letter-spacing:2px;color:var(--gold,#F5A800);font-weight:700">${esc(cod)}</span></td>
+      <td style="color:var(--mut)">${visto}</td>
+      <td style="color:var(--mut)">${esc(c.player_version||'—')}
+          <div class="est-sub">${nProg? nProg+' na programação' : 'sem programação'}${c.ativo?'':' · INATIVO'}</div></td>
+      <td style="white-space:nowrap">
+        <button class="mini" onclick="copiarCodigo('${cod}')">⧉ Código</button>
+        <button class="mini" onclick="copiarURL('${escJ(url)}')">⧉ URL</button>
+        <button class="mini" onclick='renomearCanal("${c.id}","${escA(c.nome)}")'>✎ Renomear</button>
+        <button class="mini" onclick='alternarCanal("${c.id}","${escA(c.nome)}",${c.ativo?'false':'true'})'>${c.ativo?'⊘ Inativar':'✓ Reativar'}</button>
+        <button class="mini danger" onclick='excluirCanal("${c.id}","${escA(c.nome)}",${EST_NPL[c.id]||0})'>🗑</button>
+      </td></tr>`;
+  }).join('');
+}
+
+function filtrarEstacoes(chave){
+  EST_FILTRO = chave;
+  const tabs = document.getElementById('estTabs');
+  const body = document.getElementById('estBody');
+  if(tabs) tabs.innerHTML = estTabsHtml();
+  if(body) body.innerHTML = linhasEstacoes();
+}
 let PROG_CH = null;   // canal aberto no editor de programação
 
 /* Tela "Clientes": lista + busca à esquerda, biblioteca filtrada à direita.
@@ -845,35 +908,12 @@ const VIEWS = {
     // excluir é seguro, porque programação e histórico dependem do canal
     const nPl = {};
     (pl||[]).forEach(i=> nPl[i.channel_id] = (nPl[i.channel_id]||0) + 1);
-    let rows;
-    if(!chs || chs.length===0){
-      rows='<tr><td colspan="6"><div class="empty"><b>Nenhuma estação ainda</b>Cadastre uma conta primeiro, depois adicione os canais (boxes) dela.</div></td></tr>';
-    } else {
-      rows=chs.map(c=>{
-        const online = c.last_seen_at && (Date.now()-new Date(c.last_seen_at).getTime() < 5*60*1000);
-        const visto = c.last_seen_at ? tempoRel(c.last_seen_at) : 'nunca';
-        const url = location.origin+location.pathname.replace(/index\.html$/,'')+'player.html?token='+c.device_token;
-        const cod = c.codigo_curto||'—';
-        const nProg = nPl[c.id] || 0;
-        return `<tr class="row" style="${c.ativo?'':'opacity:.5'}">
-          <td><div class="est-name">${esc(c.accounts?c.accounts.nome:'—')}</div><div class="est-sub">Canal: ${esc(c.nome)}</div></td>
-          <td><span class="stat ${online?'on':'off'}"><span class="dot ${online?'on':'off'}"></span>${online?'Online':'Offline'}</span></td>
-          <td><span style="font-family:monospace;font-size:18px;letter-spacing:2px;color:var(--gold,#F5A800);font-weight:700">${esc(cod)}</span></td>
-          <td style="color:var(--mut)">${visto}</td>
-          <td style="color:var(--mut)">${esc(c.player_version||'—')}
-              <div class="est-sub">${nProg? nProg+' na programação' : 'sem programação'}${c.ativo?'':' · INATIVO'}</div></td>
-          <td style="white-space:nowrap">
-            <button class="mini" onclick="copiarCodigo('${cod}')">⧉ Código</button>
-            <button class="mini" onclick="copiarURL('${escJ(url)}')">⧉ URL</button>
-            <button class="mini" onclick='renomearCanal("${c.id}","${escA(c.nome)}")'>✎ Renomear</button>
-            <button class="mini" onclick='alternarCanal("${c.id}","${escA(c.nome)}",${c.ativo?'false':'true'})'>${c.ativo?'⊘ Inativar':'✓ Reativar'}</button>
-            <button class="mini danger" onclick='excluirCanal("${c.id}","${escA(c.nome)}",${nPl[c.id]||0})'>🗑</button>
-          </td></tr>`;
-      }).join('');
-    }
+    EST_CHS = chs || [];
+    EST_NPL = nPl;
     return topbar('Estações & Canais','1 box = 1 canal. Use o código de 6 dígitos no app BlinPlay do box.', `<button class="solid" onclick="novaEstacao()">＋ Nova estação</button>`)
     +`<div class="panel"><div class="panel-h"><h3>Estações</h3><span class="hint">online = visto nos últimos 5 min</span></div>
-      <table><thead><tr><th>Hotel / Canal</th><th>Status</th><th>Código</th><th>Último acesso</th><th>Versão</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+      <div class="est-tabs" id="estTabs">${estTabsHtml()}</div>
+      <table><thead><tr><th>Hotel / Canal</th><th>Status</th><th>Código</th><th>Último acesso</th><th>Versão</th><th></th></tr></thead><tbody id="estBody">${linhasEstacoes()}</tbody></table></div>`;
   },
   async midia(){
     const { data: meds, error } = await sb.from('media')
