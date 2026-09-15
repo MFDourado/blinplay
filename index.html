@@ -745,8 +745,8 @@ let COLS_EXTRAS = null;   // null = ainda não sabemos
 
 async function buscarCanaisOverview(){
   const COMPLETO = 'id,nome,last_seen_at,player_version,account_id,rustdesk_id,'
-                 + 'tags,autorizado,ultimo_ip,storage_livre,storage_total,accounts(nome)';
-  const BASICO   = 'id,nome,last_seen_at,player_version,account_id,storage_livre,accounts(nome)';
+                 + 'tags,autorizado,ultimo_ip,storage_livre,storage_total,accounts(nome,cnpj)';
+  const BASICO   = 'id,nome,last_seen_at,player_version,account_id,storage_livre,accounts(nome,cnpj)';
 
   if(COLS_EXTRAS !== false){
     const r = await sb.from('channels').select(COMPLETO).eq('ativo',true).order('created_at');
@@ -836,54 +836,27 @@ const VIEWS = {
     const online=chs.filter(c=>estaOnline(c.last_seen_at)).length;
     const campsAtivas=camps.filter(c=>c.ativo && hoje>=c.data_inicio && hoje<=c.data_fim);
 
-    // tabela de canais com status
+    OV_CHS = chs; // guarda pra busca/filtro local, sem bater no banco de novo
+
+    // tabela de canais: linhas + abas de status calculadas pela mesma lógica
+    // usada nas atualizações locais (busca, tag, status), pra não duplicar
     let chRows;
-    const porTag = FILTRO_TAG ? chs.filter(c=> (c.tags||[]).includes(FILTRO_TAG)) : chs;
-    const nOnTag = porTag.filter(c=>estaOnline(c.last_seen_at)).length;
-    const nOffTag = porTag.length - nOnTag;
-    const statusTab=(chave,label,n)=>
-      `<button class="est-tab ${FILTRO_STATUS===chave?'active':''}" onclick="filtrarStatus(${chave===null?'null':"'"+chave+"'"})">${label} <span class="n">${n}</span></button>`;
-    const statusTabsHtml = `<div class="est-tabs" style="padding:14px 20px 0">`
-      + statusTab(null,'Todas',porTag.length) + statusTab('online','Online',nOnTag) + statusTab('offline','Offline',nOffTag)
-      + `</div>`;
     if(chs.length===0){
       chRows='<tr><td colspan="5"><div class="empty"><b>Nenhum canal ainda</b>Cadastre uma conta e seus canais para começar.</div></td></tr>';
     } else {
+      const porTag = FILTRO_TAG ? chs.filter(c=> (c.tags||[]).includes(FILTRO_TAG)) : chs;
       let chsFiltrados = porTag;
       if(FILTRO_STATUS==='online') chsFiltrados = porTag.filter(c=>estaOnline(c.last_seen_at));
       else if(FILTRO_STATUS==='offline') chsFiltrados = porTag.filter(c=>!estaOnline(c.last_seen_at));
-      if(chsFiltrados.length===0){
-        const rotulo = FILTRO_STATUS==='online' ? 'online' : 'offline';
-        chRows = `<tr><td colspan="5"><div class="empty"><b>Nenhum canal ${rotulo} agora</b></div></td></tr>`;
-      } else {
-      chRows=chsFiltrados.map(c=>{
-        const on=estaOnline(c.last_seen_at);
-        const visto=c.last_seen_at?tempoRel(c.last_seen_at):'nunca';
-        const tags=(c.tags||[]);
-        const tagsHtml = tags.length
-          ? tags.map(t=>'<span style="background:#1e1e24;color:var(--mut);font-size:10.5px;padding:2px 7px;border-radius:12px;margin-right:4px">'+t+'</span>').join('')
-          : '<span style="color:#4a4a52;font-size:11px">sem tags</span>';
-        const pend = (c.autorizado === false);
-        return `<tr class="row">
-          <td><div class="est-name">${esc(c.accounts?c.accounts.nome:'—')}${pend?' <span style="background:#332a10;color:#F5C518;font-size:10px;padding:2px 7px;border-radius:12px;vertical-align:middle">aguardando liberação</span>':''}</div>
-              <div class="est-sub">Canal: ${esc(c.nome)}${c.ultimo_ip?' · '+esc(c.ultimo_ip):''}</div>
-              <div style="margin-top:4px">${tagsHtml}</div></td>
-          <td><span class="stat ${on?'on':'off'}"><span class="dot ${on?'on':'off'}"></span>${on?'Online':'Offline'}</span></td>
-          <td style="color:var(--mut)">${visto}</td>
-          <td style="color:var(--mut)">${esc(c.player_version||'—')}</td>
-          <td style="white-space:nowrap">
-            <button class="mini" onclick="verTela('${c.id}','${escJ(c.nome)}')">◱ Ver tela</button>
-            ${COLS_EXTRAS===false ? '' : `<button class="mini" onclick="acessoRemoto('${c.id}','${escJ(c.nome)}')" title="${c.rustdesk_id?'RustDesk '+escA(c.rustdesk_id):'RustDesk não configurado'}">⧉ Remoto</button>`}
-            <button class="mini" onclick="pedirRefresh('${c.id}','${escJ(c.nome)}')">⟳ Atualizar tela</button>
-            ${COLS_EXTRAS===false ? '' : `<button class="mini" onclick='editarTags("${c.id}","${escA(c.nome)}",${escA(JSON.stringify(tags))})'>⌗ Tags</button>`}
-            ${COLS_EXTRAS===false ? '' : pend
-              ? `<button class="mini" style="background:#332a10;border-color:#4a3d1c;color:#F5C518" onclick='autorizar("${c.id}",true,"${escA(c.nome)}")'>✓ Autorizar</button>`
-              : `<button class="mini" onclick='autorizar("${c.id}",false,"${escA(c.nome)}")' title="revogar autorização">⊘</button>`}
-          </td>
-        </tr>`;
-      }).join('');
-      }
+      chRows = chsFiltrados.length ? chsFiltrados.map(linhaOverview).join('')
+        : `<tr><td colspan="5"><div class="empty"><b>Nenhum canal ${FILTRO_STATUS==='online'?'online':'offline'} agora</b></div></td></tr>`;
     }
+    const porTagCount = FILTRO_TAG ? chs.filter(c=> (c.tags||[]).includes(FILTRO_TAG)) : chs;
+    const nOnTag = porTagCount.filter(c=>estaOnline(c.last_seen_at)).length;
+    const nOffTag = porTagCount.length - nOnTag;
+    const statusTab=(chave,label,n)=>
+      `<button class="est-tab ${FILTRO_STATUS===chave?'active':''}" onclick="filtrarStatus(${chave===null?'null':"'"+chave+"'"})">${label} <span class="n">${n}</span></button>`;
+    const statusTabsHtml = statusTab(null,'Todas',porTagCount.length) + statusTab('online','Online',nOnTag) + statusTab('offline','Offline',nOffTag);
 
     // campanhas no ar
     let campHtml='';
@@ -908,8 +881,14 @@ const VIEWS = {
       </div>
       ${chipsTags(chs)}
       <div class="panel"><div class="panel-h"><h3>Canais</h3><span class="hint">online = visto nos últimos 5 min</span></div>
-        ${statusTabsHtml}
-        <table><thead><tr><th>Hotel / Canal</th><th>Status</th><th>Último acesso</th><th>Versão</th><th></th></tr></thead><tbody>${chRows}</tbody></table></div>`
+        <div style="padding:14px 20px 0">
+          <input id="ovBusca" type="text" placeholder="Buscar por nome do hotel ou CNPJ…"
+            value="${escA(FILTRO_BUSCA)}" oninput="filtrarBusca(this.value)"
+            style="width:100%;max-width:360px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);
+                   color:var(--txt);padding:9px 12px;font-size:13px;font-family:inherit">
+        </div>
+        <div class="est-tabs" id="ovTabs">${statusTabsHtml}</div>
+        <table><thead><tr><th>Hotel / Canal</th><th>Status</th><th>Último acesso</th><th>Versão</th><th></th></tr></thead><tbody id="ovBody">${chRows}</tbody></table></div>`
     + campHtml;
   },
   async estacoes(){
@@ -2370,7 +2349,7 @@ async function exportarDispositivos(){
     const { data } = await sb.from('channels')
       .select('nome,codigo_curto,mac,ultimo_ip,observacao,player_version,last_seen_at,storage_livre,storage_total,accounts(nome,cnpj)')
       .order('created_at');
-    const cab = ['Hotel','CNPJ','Canal','Codigo','MAC','IP','Versao','Ultimo acesso','Disco livre GB','Disco total GB','Observacao'];
+    const cab = ['Hotel','CNPJ','Canal','Código','MAC','IP','Versão','Último acesso','Disco livre GB','Disco total GB','Observação'];
     const linhas = (data||[]).map(c=>[
       c.accounts?c.accounts.nome:'', c.accounts?(c.accounts.cnpj||''):'',
       c.nome||'', c.codigo_curto||'', c.mac||'', c.ultimo_ip||'',
@@ -2407,10 +2386,85 @@ async function exportarDispositivos(){
    de outro hotel — risco real numa migração de frota inteira. */
 let FILTRO_TAG = null;
 let FILTRO_STATUS = null;
+let FILTRO_BUSCA = '';
+let OV_CHS = [];         // guarda os canais já buscados, pra filtrar sem refetch
 
-function filtrarStatus(v){ FILTRO_STATUS = v; render(); }
+function filtrarBusca(v){ FILTRO_BUSCA = v; renderOverviewInterativo(); }
+function filtrarStatus(v){ FILTRO_STATUS = v; renderOverviewInterativo(); }
+function filtrarTag(t){ FILTRO_TAG = t; renderOverviewInterativo(); }
 
-function chipsTags(canais){
+// linha da tabela de canais na Visão Geral — extraída pra ser reaproveitada
+// tanto no primeiro render quanto nas atualizações locais de busca/filtro
+function linhaOverview(c){
+  const on=estaOnline(c.last_seen_at);
+  const visto=c.last_seen_at?tempoRel(c.last_seen_at):'nunca';
+  const tags=(c.tags||[]);
+  const tagsHtml = tags.length
+    ? tags.map(t=>'<span style="background:#1e1e24;color:var(--mut);font-size:10.5px;padding:2px 7px;border-radius:12px;margin-right:4px">'+t+'</span>').join('')
+    : '<span style="color:#4a4a52;font-size:11px">sem tags</span>';
+  const pend = (c.autorizado === false);
+  return `<tr class="row">
+    <td><div class="est-name">${esc(c.accounts?c.accounts.nome:'—')}${pend?' <span style="background:#332a10;color:#F5C518;font-size:10px;padding:2px 7px;border-radius:12px;vertical-align:middle">aguardando liberação</span>':''}</div>
+        <div class="est-sub">Canal: ${esc(c.nome)}${c.ultimo_ip?' · '+esc(c.ultimo_ip):''}</div>
+        <div style="margin-top:4px">${tagsHtml}</div></td>
+    <td><span class="stat ${on?'on':'off'}"><span class="dot ${on?'on':'off'}"></span>${on?'Online':'Offline'}</span></td>
+    <td style="color:var(--mut)">${visto}</td>
+    <td style="color:var(--mut)">${esc(c.player_version||'—')}</td>
+    <td style="white-space:nowrap">
+      <button class="mini" onclick="verTela('${c.id}','${escJ(c.nome)}')">◱ Ver tela</button>
+      ${COLS_EXTRAS===false ? '' : `<button class="mini" onclick="acessoRemoto('${c.id}','${escJ(c.nome)}')" title="${c.rustdesk_id?'RustDesk '+escA(c.rustdesk_id):'RustDesk não configurado'}">⧉ Remoto</button>`}
+      <button class="mini" onclick="pedirRefresh('${c.id}','${escJ(c.nome)}')">⟳ Atualizar tela</button>
+      ${COLS_EXTRAS===false ? '' : `<button class="mini" onclick='editarTags("${c.id}","${escA(c.nome)}",${escA(JSON.stringify(tags))})'>⌗ Tags</button>`}
+      ${COLS_EXTRAS===false ? '' : pend
+        ? `<button class="mini" style="background:#332a10;border-color:#4a3d1c;color:#F5C518" onclick='autorizar("${c.id}",true,"${escA(c.nome)}")'>✓ Autorizar</button>`
+        : `<button class="mini" onclick='autorizar("${c.id}",false,"${escA(c.nome)}")' title="revogar autorização">⊘</button>`}
+    </td>
+  </tr>`;
+}
+
+// recalcula tags/status/busca sobre o que já está em memória (OV_CHS) e só
+// substitui os pedaços da tela que mudam — sem bater no banco de novo.
+// Essencial pra busca funcionar digitando, sem travar com muitas unidades.
+function renderOverviewInterativo(){
+  if(!OV_CHS.length) return;
+  const porTag = FILTRO_TAG ? OV_CHS.filter(c=> (c.tags||[]).includes(FILTRO_TAG)) : OV_CHS;
+
+  const termo = FILTRO_BUSCA.trim().toLowerCase();
+  const termoNum = termo.replace(/\D/g,'');
+  const porBusca = !termo ? porTag : porTag.filter(c=>{
+    const nome = (c.accounts && c.accounts.nome || '').toLowerCase();
+    const cnpj = (c.accounts && c.accounts.cnpj || '').replace(/\D/g,'');
+    return nome.includes(termo) || (termoNum && cnpj.includes(termoNum));
+  });
+
+  const nOn = porBusca.filter(c=>estaOnline(c.last_seen_at)).length;
+  const nOff = porBusca.length - nOn;
+  const statusTab=(chave,label,n)=>
+    `<button class="est-tab ${FILTRO_STATUS===chave?'active':''}" onclick="filtrarStatus(${chave===null?'null':"'"+chave+"'"})">${label} <span class="n">${n}</span></button>`;
+  const tabsHtml = statusTab(null,'Todas',porBusca.length) + statusTab('online','Online',nOn) + statusTab('offline','Offline',nOff);
+
+  let list = porBusca;
+  if(FILTRO_STATUS==='online') list = porBusca.filter(c=>estaOnline(c.last_seen_at));
+  else if(FILTRO_STATUS==='offline') list = porBusca.filter(c=>!estaOnline(c.last_seen_at));
+
+  let rowsHtml;
+  if(!list.length){
+    rowsHtml = termo
+      ? `<tr><td colspan="5"><div class="empty"><b>Nenhum resultado para "${esc(FILTRO_BUSCA)}"</b></div></td></tr>`
+      : `<tr><td colspan="5"><div class="empty"><b>Nenhum canal aqui</b>${FILTRO_STATUS?'Nenhum está '+(FILTRO_STATUS==='online'?'online':'offline')+' no momento.':''}</div></td></tr>`;
+  } else {
+    rowsHtml = list.map(linhaOverview).join('');
+  }
+
+  const tabsEl = document.getElementById('ovTabs');
+  const bodyEl = document.getElementById('ovBody');
+  const chipsEl = document.getElementById('ovChips');
+  if(tabsEl) tabsEl.innerHTML = tabsHtml;
+  if(bodyEl) bodyEl.innerHTML = rowsHtml;
+  if(chipsEl) chipsEl.innerHTML = chipsTagsInner(OV_CHS);
+}
+
+function chipsTagsInner(canais){
   if(COLS_EXTRAS === false) return '';   // recursos dormentes até rodar o SQL
   const cont = {};
   canais.forEach(c=> (c.tags||[]).forEach(t=> cont[t]=(cont[t]||0)+1 ));
@@ -2423,12 +2477,14 @@ function chipsTags(canais){
     '<button class="mini" style="'+(ativo?'background:#2a2118;border-color:#4a3d1c;color:#F5C518':'')+'" '+
     'onclick="filtrarTag('+(t===null?'null':'&#39;'+escJ(t)+'&#39;')+')">'+esc(t||'todas')+
     (n!==null?' <span style="opacity:.55">'+esc(n)+'</span>':'')+'</button>';
-  return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 2px">'+
-    chip(null,null,FILTRO_TAG===null)+
-    tags.map(t=> chip(t,cont[t],FILTRO_TAG===t)).join('')+'</div>';
+  return chip(null,null,FILTRO_TAG===null) + tags.map(t=> chip(t,cont[t],FILTRO_TAG===t)).join('');
 }
 
-function filtrarTag(t){ FILTRO_TAG = t; render(); }
+function chipsTags(canais){
+  const inner = chipsTagsInner(canais);
+  if(!inner) return '';
+  return '<div id="ovChips" style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 2px">'+inner+'</div>';
+}
 
 async function autorizar(channelId, valor, nome){
   const rotulo = valor ? 'Autorizar' : 'Revogar autorização de';
