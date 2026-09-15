@@ -1009,6 +1009,7 @@ const VIEWS = {
           <td><span class="badge ${tipo==='Blincast'?'live':'sched'}">${tipo}</span></td>
           <td style="color:var(--mut)">${n} canal${n===1?'':'is'}</td>
           <td style="white-space:nowrap">
+            <button class="mini" onclick='editarConta("${a.id}")'>✎ Editar</button>
             <button class="mini" onclick="CUR='usuarios';buildNav();render()">Usuários</button>
             <button class="mini" onclick='alternarConta("${a.id}","${nomeEsc}",${a.ativo?'false':'true'})'>${a.ativo?'⊘ Inativar':'✓ Reativar'}</button>
             ${n===0
@@ -1382,6 +1383,85 @@ async function salvarConta(){
   if(error){ msg.className='fmsg err'; msg.textContent = error.code==='23505' ? 'Já existe uma conta com esse CNPJ.' : ('Erro: '+error.message); return; }
   msg.className='fmsg ok'; msg.textContent='Conta criada!';
   setTimeout(()=>{ fecharModal(); render(); }, 500);
+}
+
+/* ---- Editar conta: dados cadastrais (contato, endereço, anexo) ---- */
+async function editarConta(id){
+  const { data: a, error } = await sb.from('accounts')
+    .select('id,nome,cnpj,plano,contato_nome,endereco,anexo_path,anexo_nome')
+    .eq('id', id).single();
+  if(error || !a){ alert('Não foi possível carregar os dados da conta.'); return; }
+
+  const anexoInfo = a.anexo_path
+    ? `<a href="#" onclick="abrirAnexoConta('${escJ(a.anexo_path)}');return false">📎 ${esc(a.anexo_nome||'arquivo anexado')}</a>
+       <button class="mini danger" style="margin-left:8px" onclick="removerAnexoConta('${a.id}')">Remover</button>`
+    : `<span style="color:var(--mut)">Nenhum arquivo anexado</span>`;
+
+  abrirModal(`
+    <h3>Editar cliente</h3>
+    <div class="fsub">Dados cadastrais do hotel/empresa.</div>
+    <div class="fld"><label>Nome do hotel / empresa</label><input id="ec_nome" value="${escA(a.nome||'')}"></div>
+    <div class="fld"><label>CNPJ <span style="color:var(--gold)">*</span></label><input id="ec_cnpj" value="${escA(a.cnpj||'')}" maxlength="18" inputmode="numeric" oninput="mascaraCNPJ(this)"></div>
+    <div class="fld"><label>Nome do contato</label><input id="ec_contato" value="${escA(a.contato_nome||'')}" placeholder="Ex: Maria Silva"></div>
+    <div class="fld"><label>Endereço</label><input id="ec_endereco" value="${escA(a.endereco||'')}" placeholder="Rua, número, bairro, cidade - UF"></div>
+    <div class="fld"><label>Anexo (contrato, comprovante, etc.)</label>
+      <div id="ec_anexo_atual">${anexoInfo}</div>
+      <input id="ec_file" type="file" style="margin-top:8px" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx"></div>
+    <div id="ec_msg" class="fmsg"></div>
+    <div class="form-actions">
+      <button class="fa-cancel" onclick="fecharModal()">Cancelar</button>
+      <button class="fa-save" id="ec_btn" onclick="salvarEdicaoConta('${a.id}')">Salvar</button>
+    </div>`);
+}
+
+async function salvarEdicaoConta(id){
+  const nome=val('ec_nome'), cnpj=val('ec_cnpj'), contato=val('ec_contato'), endereco=val('ec_endereco');
+  const msg=document.getElementById('ec_msg'), btn=document.getElementById('ec_btn');
+  if(!nome){ msg.className='fmsg err'; msg.textContent='Preencha o nome do hotel.'; return; }
+  const soNum = cnpj.replace(/\D/g,'');
+  if(soNum.length!==14){ msg.className='fmsg err'; msg.textContent='CNPJ incompleto. Use o formato 00.000.000/0001-00.'; return; }
+
+  btn.disabled=true; msg.className='fmsg'; msg.textContent='Salvando…';
+
+  const patch = { nome, cnpj: cnpjNormalizado(cnpj), contato_nome: contato||null, endereco: endereco||null };
+
+  const fileEl=document.getElementById('ec_file');
+  const f=fileEl && fileEl.files && fileEl.files[0];
+  if(f){
+    if(f.size > 20*1048576){ msg.className='fmsg err'; msg.textContent='Arquivo acima de 20 MB.'; btn.disabled=false; return; }
+    msg.textContent='Enviando anexo…';
+    // mesma lógica de sanitização de extensão usada no upload de mídia
+    const ext=((f.name.split('.').pop()||'bin').toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,5))||'bin';
+    const path = id+'/'+Date.now()+'_doc.'+ext;
+    const up = await sb.storage.from('blinplay-docs').upload(path, f, { contentType:f.type, upsert:false });
+    if(up.error){ msg.className='fmsg err'; msg.textContent='Falha ao enviar anexo: '+up.error.message; btn.disabled=false; return; }
+    patch.anexo_path = path;
+    patch.anexo_nome = f.name;
+  }
+
+  msg.textContent='Salvando dados…';
+  const { error } = await sb.from('accounts').update(patch).eq('id', id);
+  if(error){
+    msg.className='fmsg err';
+    msg.textContent = error.code==='23505' ? 'Já existe uma conta com esse CNPJ.' : ('Erro: '+error.message);
+    btn.disabled=false; return;
+  }
+  msg.className='fmsg ok'; msg.textContent='Salvo!';
+  setTimeout(()=>{ fecharModal(); render(); }, 500);
+}
+
+async function abrirAnexoConta(path){
+  const { data, error } = await sb.storage.from('blinplay-docs').createSignedUrl(path, 300);
+  if(error || !data){ alert('Não foi possível abrir o anexo: '+(error?error.message:'')); return; }
+  window.open(data.signedUrl, '_blank');
+}
+
+async function removerAnexoConta(id){
+  if(!confirm('Remover o anexo desta conta?')) return;
+  const { data:a } = await sb.from('accounts').select('anexo_path').eq('id',id).single();
+  if(a && a.anexo_path){ await sb.storage.from('blinplay-docs').remove([a.anexo_path]); }
+  await sb.from('accounts').update({ anexo_path:null, anexo_nome:null }).eq('id', id);
+  editarConta(id); // reabre o modal já atualizado, sem o anexo
 }
 
 /* ---- Máscara de CNPJ: 00.000.000/0001-00 ---- */
