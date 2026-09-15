@@ -838,10 +838,24 @@ const VIEWS = {
 
     // tabela de canais com status
     let chRows;
+    const porTag = FILTRO_TAG ? chs.filter(c=> (c.tags||[]).includes(FILTRO_TAG)) : chs;
+    const nOnTag = porTag.filter(c=>estaOnline(c.last_seen_at)).length;
+    const nOffTag = porTag.length - nOnTag;
+    const statusTab=(chave,label,n)=>
+      `<button class="est-tab ${FILTRO_STATUS===chave?'active':''}" onclick="filtrarStatus(${chave===null?'null':"'"+chave+"'"})">${label} <span class="n">${n}</span></button>`;
+    const statusTabsHtml = `<div class="est-tabs" style="padding:14px 20px 0">`
+      + statusTab(null,'Todas',porTag.length) + statusTab('online','Online',nOnTag) + statusTab('offline','Offline',nOffTag)
+      + `</div>`;
     if(chs.length===0){
       chRows='<tr><td colspan="5"><div class="empty"><b>Nenhum canal ainda</b>Cadastre uma conta e seus canais para começar.</div></td></tr>';
     } else {
-      const chsFiltrados = FILTRO_TAG ? chs.filter(c=> (c.tags||[]).includes(FILTRO_TAG)) : chs;
+      let chsFiltrados = porTag;
+      if(FILTRO_STATUS==='online') chsFiltrados = porTag.filter(c=>estaOnline(c.last_seen_at));
+      else if(FILTRO_STATUS==='offline') chsFiltrados = porTag.filter(c=>!estaOnline(c.last_seen_at));
+      if(chsFiltrados.length===0){
+        const rotulo = FILTRO_STATUS==='online' ? 'online' : 'offline';
+        chRows = `<tr><td colspan="5"><div class="empty"><b>Nenhum canal ${rotulo} agora</b></div></td></tr>`;
+      } else {
       chRows=chsFiltrados.map(c=>{
         const on=estaOnline(c.last_seen_at);
         const visto=c.last_seen_at?tempoRel(c.last_seen_at):'nunca';
@@ -868,6 +882,7 @@ const VIEWS = {
           </td>
         </tr>`;
       }).join('');
+      }
     }
 
     // campanhas no ar
@@ -893,6 +908,7 @@ const VIEWS = {
       </div>
       ${chipsTags(chs)}
       <div class="panel"><div class="panel-h"><h3>Canais</h3><span class="hint">online = visto nos últimos 5 min</span></div>
+        ${statusTabsHtml}
         <table><thead><tr><th>Hotel / Canal</th><th>Status</th><th>Último acesso</th><th>Versão</th><th></th></tr></thead><tbody>${chRows}</tbody></table></div>`
     + campHtml;
   },
@@ -2390,6 +2406,9 @@ async function exportarDispositivos(){
    autorização evita que um dígito errado no código coloque um box no canal
    de outro hotel — risco real numa migração de frota inteira. */
 let FILTRO_TAG = null;
+let FILTRO_STATUS = null;
+
+function filtrarStatus(v){ FILTRO_STATUS = v; render(); }
 
 function chipsTags(canais){
   if(COLS_EXTRAS === false) return '';   // recursos dormentes até rodar o SQL
