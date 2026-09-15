@@ -1007,7 +1007,7 @@ const VIEWS = {
           <td style="color:var(--mut)">${esc(a.cnpj)}</td>
           <td><span class="badge ${a.ativo?'live':'done'}">${a.ativo?'Ativa':'Inativa'}</span></td>
           <td><span class="badge ${tipo==='Blincast'?'live':'sched'}">${tipo}</span></td>
-          <td style="color:var(--mut)">${n} canal${n===1?'':'is'}</td>
+          <td style="color:var(--mut)">${n===1 ? '1 canal' : n+' canais'}</td>
           <td style="white-space:nowrap">
             <button class="mini" onclick='editarConta("${a.id}")'>✎ Editar</button>
             <button class="mini" onclick="CUR='usuarios';buildNav();render()">Usuários</button>
