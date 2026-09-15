@@ -1020,6 +1020,22 @@ function tocar(){
       logar('LOOP NATIVO ativado (canal de 1 video)');
     }
 
+    // CONTAGEM DE VOLTA NO LOOP NATIVO.
+    // Com loop=true o 'ended' nunca dispara (o navegador reinicia sozinho),
+    // então sem isso "voltas" ficaria travado em 0 pra sempre num canal de
+    // 1 vídeo. Detectamos o próprio reinício pelo salto de currentTime (de
+    // perto do fim direto pra perto de 0) e contamos ali — 1 volta = 1
+    // reprodução completa do vídeo, igual antes do loop nativo existir.
+    if(loopUnico){
+      let ultimoTempoVolta = 0;
+      v.addEventListener('timeupdate', ()=>{
+        if(g !== geracao) return;
+        if(v.currentTime < ultimoTempoVolta - 1){
+          voltas++; logar('VOLTA #'+voltas+' concluida (loop nativo)');
+        }
+        ultimoTempoVolta = v.currentTime;
+      });
+    }
     // ---------------------------------------------------------------
     // AVANÇO DE VÍDEO — robusto para WebView de Android TV (Fully Kiosk)
     //
@@ -1074,6 +1090,11 @@ function tocar(){
     let ultimoTempo = 0, paradoDesde = Date.now();
     v.addEventListener('timeupdate', ()=>{
       if(v.currentTime > ultimoTempo + 0.25){ ultimoTempo = v.currentTime; paradoDesde = Date.now(); }
+      // loop nativo reinicia o currentTime pra perto de 0: sem isso o
+      // watchdog interpretava a queda como "parou de progredir" e, uns 20s
+      // depois, disparava avancar() por engano a cada loop — contando
+      // "voltas" bem mais rápido que a duração real do vídeo.
+      else if(v.currentTime < ultimoTempo - 1){ ultimoTempo = v.currentTime; paradoDesde = Date.now(); }
     });
     const STALL_MS = 20000; // 20s sem progresso = travou de verdade
     const vigia = setInterval(()=>{
