@@ -151,7 +151,7 @@ async function verificarAutorizacao(){
     if(/Could not find the function|PGRST202|does not exist|404/i.test(msg)){
       portaoInstalado = false;
       autorizado = true;
-      logar('AUTORIZACAO: portao nao instalado no banco — seguindo sem bloqueio');
+      logar('AUTORIZACAO: portão não instalado no banco — seguindo sem bloqueio');
       return true;
     }
 
@@ -297,7 +297,7 @@ function veredito(){
   if(d.incl === null) return 'medindo';
   if(d.incl > 0.8)  return 'VAZAMENTO: +'+d.incl.toFixed(2)+' MB/min';
   if(d.incl > 0.25) return 'suspeito: +'+d.incl.toFixed(2)+' MB/min';
-  return 'ESTAVEL ('+d.incl.toFixed(2)+' MB/min)';
+  return 'ESTÁVEL ('+d.incl.toFixed(2)+' MB/min)';
 }
 async function amostrar(){
   const h = heapMB();
@@ -331,7 +331,7 @@ function estadoAudio(){
     const st = document.getElementById('stage');
     const on = st && (st.querySelector('.slide.on') || st.lastElementChild);
     const v  = on && on.querySelector ? on.querySelector('video') : null;
-    if(!v) return 'sem video na tela';
+    if(!v) return 'sem vídeo na tela';
     return v.muted ? 'MUDO' : ('com som (vol '+Math.round((v.volume||0)*100)+'%)');
   }catch(e){ return 'n/d'; }
 }
@@ -340,7 +340,7 @@ function infoOwner(){
   try{
     if(!window.BlinPlayNative || !window.BlinPlayNative.ehDeviceOwner) return 'ponte antiga';
     const o = window.BlinPlayNative.ehDeviceOwner();
-    if(!o) return 'NAO provisionado';
+    if(!o) return 'NÃO provisionado';
     let k = false;
     try{ k = window.BlinPlayNative.kiosk(); }catch(e){}
     return 'SIM' + (k ? ' · kiosk ativo' : ' · kiosk inativo');
@@ -348,8 +348,8 @@ function infoOwner(){
 }
 
 function estadoSW(){
-  if(!('serviceWorker' in navigator)) return 'INDISPONIVEL (WebView sem SW)';
-  if(!navigator.serviceWorker.controller) return 'NAO CONTROLA (registrado? aguarde/reload)';
+  if(!('serviceWorker' in navigator)) return 'INDISPONÍVEL (WebView sem SW)';
+  if(!navigator.serviceWorker.controller) return 'NÃO CONTROLA (registrado? aguarde/reload)';
   return 'ATIVO';
 }
 
@@ -361,15 +361,15 @@ function pintarHud(){
     '<b>BlinPlay '+PLAYER_VERSION+'</b>  up '+hhmmss(Date.now()-bootEm),
     'SW.......: '+estadoSW(),
     'owner....: '+infoOwner(),
-    'portao...: '+(portaoInstalado ? (autorizado===true?'autorizado':'aguardando') : 'nao instalado'),
+    'portão...: '+(portaoInstalado ? (autorizado===true?'autorizado':'aguardando') : 'não instalado'),
     'recargas.: '+recargas+'/'+MAX_RECARGAS,
-    'midia....: '+(NATIVO? 'NATIVA (arquivo do app)' : 'cache do navegador'),
+    'mídia....: '+(NATIVO? 'NATIVA (arquivo do app)' : 'cache do navegador'),
     'persist..: '+persistOK+(NATIVO? '  (irrelevante no modo nativo)' : ''),
     'rede.....: '+(navigator.onLine? 'online':'OFFLINE'),
     'cache....: '+(ultEstimate? (ultEstimate.usage/1048576).toFixed(1)+' MB de '+(ultEstimate.quota/1048576).toFixed(0)+' MB' : 'medindo...'),
     'heap.....: '+(h? h.usado+' / '+h.total+' MB  (limite '+h.limite+')' : 'n/d'),
     'playlist.: '+playlist.length+' itens, indisp='+indisponiveis.size,
-    'midias...: '+auditoria.ok+'/'+auditoria.total+' em cache'+
+    'mídias...: '+auditoria.ok+'/'+auditoria.total+' em cache'+
       (auditoria.faltando.length? '  <b>FALTAM '+auditoria.faltando.length+'</b>' : ''),
     'tocando..: #'+idx+' '+(item? escP((item.tipo||'?')+' '+String(item.path||'').slice(-26)) : '-'),
     'voltas...: '+voltas+'   trocas: '+trocas+'   erros: '+erros,
@@ -377,7 +377,7 @@ function pintarHud(){
     'envio log: '+statusEnvio,
     'kotlin...: '+escP(relatoKotlin),
     'captura..: '+snapEstado,
-    'audio....: '+estadoAudio()
+    'áudio....: '+estadoAudio()
   ];
   document.getElementById('hud').innerHTML = linhas.join('\n');
 }
