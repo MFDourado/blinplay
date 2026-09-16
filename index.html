@@ -464,6 +464,49 @@ const NAV = {
   ]
 };
 let EST_CHS = [], EST_NPL = {}, EST_FILTRO = 'todos';
+let CLI_OV_CHS = [], CLI_OV_FILTRO = null;
+
+function cliOverviewTabsHtml(){
+  const total = CLI_OV_CHS.length;
+  const nOn = CLI_OV_CHS.filter(c=>estaOnline(c.last_seen_at)).length;
+  const nOff = total - nOn;
+  const tab=(chave,label,n)=>
+    `<button class="est-tab ${CLI_OV_FILTRO===chave?'active':''}" onclick="filtrarCliOverview(${chave===null?'null':"'"+chave+"'"})">${label} <span class="n">${n}</span></button>`;
+  return tab(null,'Todas',total)+tab('online','Online',nOn)+tab('offline','Offline',nOff);
+}
+
+function linhasCliOverview(nomePorConta){
+  let list = CLI_OV_CHS;
+  if(CLI_OV_FILTRO==='online') list = list.filter(c=>estaOnline(c.last_seen_at));
+  else if(CLI_OV_FILTRO==='offline') list = list.filter(c=>!estaOnline(c.last_seen_at));
+
+  if(!CLI_OV_CHS.length){
+    return '<tr><td colspan="4"><div class="empty"><b>Nenhum canal ainda</b>A Blincast instala e configura seus canais.</div></td></tr>';
+  }
+  if(!list.length){
+    return `<tr><td colspan="4"><div class="empty"><b>Nenhum canal ${CLI_OV_FILTRO==='online'?'online':'offline'} agora</b></div></td></tr>`;
+  }
+  return list.map(c=>{
+    const online=estaOnline(c.last_seen_at);
+    const visto=c.last_seen_at?tempoRel(c.last_seen_at):'nunca';
+    return `<tr class="row">
+      <td><div class="est-name">${esc(nomePorConta[c.account_id]||'—')}</div><div class="est-sub">Canal: ${esc(c.nome)}</div></td>
+      <td><span class="stat ${online?'on':'off'}"><span class="dot ${online?'on':'off'}"></span>${online?'Online':'Offline'}</span></td>
+      <td style="color:var(--mut)">${visto}</td>
+      <td style="color:var(--mut)">${esc(c.player_version||'—')}</td>
+    </tr>`;
+  }).join('');
+}
+
+function filtrarCliOverview(v){
+  CLI_OV_FILTRO = v;
+  const tabsEl = document.getElementById('cliOvTabs');
+  const bodyEl = document.getElementById('cliOvBody');
+  const nomePorConta = {};
+  CLI_ACCS.forEach(a=> nomePorConta[a.id]=a.nome);
+  if(tabsEl) tabsEl.innerHTML = cliOverviewTabsHtml();
+  if(bodyEl) bodyEl.innerHTML = linhasCliOverview(nomePorConta);
+}
 let ROLE='admin', CUR='overview';
 
 function canalOnline(c){
@@ -679,6 +722,7 @@ async function logout(){
   try{ if(sb) await sb.auth.signOut(); }catch(e){}
   CLI_ACC=null; CLI_ACCS=[]; PROG_CH=null;
   MIDIA_CLI_SEL=null; MIDIA_CLI_BUSCA=''; MIDIA_CLI_ACCS=null; MIDIA_CLI_CONT={}; MIDIA_CLI_TOTAL=0;
+  CLI_OV_CHS=[]; CLI_OV_FILTRO=null;
   document.getElementById('app').classList.remove('show');
   document.getElementById('login').classList.remove('hidden');
   document.getElementById('pass').value='';
@@ -695,9 +739,12 @@ function buildNav(){
     b.innerHTML=`<span class="ic">${item.ic}</span> ${item.label}`;
     b.onclick=()=>{CUR=item.k;PROG_CH=null;buildNav();render();}; el.appendChild(b);
   });
-  // gerente de rede: botão pra trocar de hotel
+  // gerente de rede: botão pra trocar de hotel + visão geral de todas as unidades
   if(ROLE==='cli' && CLI_ACCS.length>1){
     const sec=document.createElement('div');sec.className='nav-sec';sec.textContent='REDE';el.appendChild(sec);
+    const v=document.createElement('button'); v.className='nav'+(CUR==='cli_overview'?' active':'');
+    v.innerHTML=`<span class="ic">▦</span> Visão Geral da Rede`;
+    v.onclick=()=>{CUR='cli_overview';buildNav();render();}; el.appendChild(v);
     const t=document.createElement('button');t.className='nav';
     t.innerHTML=`<span class="ic">⇄</span> Trocar de hotel`;
     t.onclick=trocarHotel; el.appendChild(t);
@@ -1203,6 +1250,34 @@ const VIEWS = {
     return topbar('Meus Canais', CLI_ACC.nome+' · status dos boxes','')
       +`<div class="panel"><div class="panel-h"><h3>Canais</h3><span class="hint">online = visto nos últimos 5 min</span></div>
         <table><thead><tr><th>Canal</th><th>Status</th><th>Último acesso</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  },
+
+  // gerente de rede: todas as unidades que ele acessa, de uma vez só —
+  // pra saber o que tá online/offline sem precisar entrar unidade por unidade
+  async cli_overview(){
+    if(!CLI_ACCS || CLI_ACCS.length===0) return '';
+    const ids = CLI_ACCS.map(a=>a.id);
+    const { data: chs, error } = await sb.from('channels')
+      .select('id,nome,last_seen_at,player_version,account_id').in('account_id', ids).eq('ativo',true).order('created_at');
+    if(error) throw error;
+    CLI_OV_CHS = chs || [];
+
+    const nomePorConta = {};
+    CLI_ACCS.forEach(a=> nomePorConta[a.id]=a.nome);
+
+    const total = CLI_OV_CHS.length;
+    const online = CLI_OV_CHS.filter(c=>estaOnline(c.last_seen_at)).length;
+
+    return topbar('Visão Geral da Rede', 'Todas as '+CLI_ACCS.length+' unidades que você gerencia · '+new Date().toLocaleDateString('pt-BR'))
+    +`<div class="kpis">
+        <div class="kpi"><div class="lab">Unidades</div><div class="val">${CLI_ACCS.length}</div></div>
+        <div class="kpi"><div class="lab">Canais</div><div class="val">${total}</div></div>
+        <div class="kpi"><div class="lab">Online agora</div><div class="val" style="color:var(--on)">${online}<small>/${total}</small></div></div>
+      </div>
+      <div class="panel"><div class="panel-h"><h3>Canais</h3><span class="hint">online = visto nos últimos 5 min</span></div>
+        <div class="est-tabs" id="cliOvTabs">${cliOverviewTabsHtml()}</div>
+        <table><thead><tr><th>Unidade / Canal</th><th>Status</th><th>Último acesso</th><th>Versão</th></tr></thead>
+          <tbody id="cliOvBody">${linhasCliOverview(nomePorConta)}</tbody></table></div>`;
   },
 };
 
