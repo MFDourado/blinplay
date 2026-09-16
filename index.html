@@ -1415,7 +1415,7 @@ async function salvarConta(){
   if(soNum.length!==14){ msg.className='fmsg err'; msg.textContent='CNPJ incompleto. Use o formato 00.000.000/0001-00.'; return; }
   msg.className='fmsg'; msg.textContent='Salvando…';
   const { error } = await sb.from('accounts').insert({ nome, cnpj: cnpjNormalizado(cnpj), plano, ativo:true });
-  if(error){ msg.className='fmsg err'; msg.textContent = error.code==='23505' ? 'Já existe uma conta com esse CNPJ.' : ('Erro: '+error.message); return; }
+  if(error){ msg.className='fmsg err'; msg.textContent = 'Erro: '+error.message; return; }
   msg.className='fmsg ok'; msg.textContent='Conta criada!';
   setTimeout(()=>{ fecharModal(); render(); }, 500);
 }
@@ -1478,7 +1478,7 @@ async function salvarEdicaoConta(id){
   const { error } = await sb.from('accounts').update(patch).eq('id', id);
   if(error){
     msg.className='fmsg err';
-    msg.textContent = error.code==='23505' ? 'Já existe uma conta com esse CNPJ.' : ('Erro: '+error.message);
+    msg.textContent = 'Erro: '+error.message;
     btn.disabled=false; return;
   }
   msg.className='fmsg ok'; msg.textContent='Salvo!';
