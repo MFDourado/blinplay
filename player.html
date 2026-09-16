@@ -1026,11 +1026,18 @@ function tocar(){
     // 1 vídeo. Detectamos o próprio reinício pelo salto de currentTime (de
     // perto do fim direto pra perto de 0) e contamos ali — 1 volta = 1
     // reprodução completa do vídeo, igual antes do loop nativo existir.
+    // IMPORTANTE: só conta quando estava PERTO DO FIM e caiu PERTO DO INÍCIO.
+    // Um soluço de rede/decodificação no meio do vídeo também recua o
+    // currentTime um pouco — sem essa checagem dupla, cada tropeço no meio
+    // da reprodução era contado como uma volta inteira, inflando o número
+    // bem mais rápido que a duração real do vídeo (foi o que voltou a
+    // acontecer com a checagem simples de antes).
     if(loopUnico){
       let ultimoTempoVolta = 0;
       v.addEventListener('timeupdate', ()=>{
         if(g !== geracao) return;
-        if(v.currentTime < ultimoTempoVolta - 1){
+        const dur = v.duration;
+        if(dur && ultimoTempoVolta > dur - 1.5 && v.currentTime < 1.5){
           voltas++; logar('VOLTA #'+voltas+' concluida (loop nativo)');
         }
         ultimoTempoVolta = v.currentTime;
