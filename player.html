@@ -821,6 +821,7 @@ let rtEspera = 10000;   // espera atual do recuo exponencial (teto 5 min)
 let geracao = 0;
 let errTimer = null;          // timer do caminho de erro (agora cancelável)
 const indisponiveis = new Set();  // paths que falharam: saem do rodízio
+const errosContados = new Set();  // paths cujo erro já foi somado em "erros" (evita recontar a cada retry do mesmo item)
 let semMidiaAvisado = false;
 
 /* ================= HELPERS UI ================= */
@@ -915,7 +916,16 @@ function liberarMidia(node){
    o mesmo erro volta após volta). Se tudo falhar, mostra tela de estado. */
 function marcarIndisponivel(path){
   if(!path) return;
-  if(!indisponiveis.has(path)){ erros++; logar('MIDIA-FALHOU '+String(path).slice(-40)); }
+  // ANTES: com playlist de 1 item, a função retornava cedo demais e NUNCA
+  // chegava a marcar o path como já contado — então cada nova tentativa
+  // falha (a cada ~1.5s) incrementava "erros" de novo, pra sempre. Por
+  // isso "erros" e "voltas" explodiam juntos num vídeo com problema real
+  // de decodificação: 88 erros em 3 minutos = 1 tentativa nova a cada 2s.
+  // Usamos um Set à parte (errosContados) — e não `indisponiveis` — porque
+  // `indisponiveis` também decide se o item é pulado em tocar(); com 1 item
+  // só, marcá-lo ali faria o player desistir de vez em vez de continuar
+  // tentando (o comportamento antigo, que é o certo pro caso de 1 item).
+  if(!errosContados.has(path)){ errosContados.add(path); erros++; logar('MIDIA-FALHOU '+String(path).slice(-40)); }
 
   /* NUNCA sacrificar o ultimo item. Barrar a unica midia do canal deixa a
      tela em estado de espera permanente — pior do que insistir numa midia
@@ -1071,7 +1081,7 @@ function tocar(){
       // timer RASTREADO: no v2.7 este setTimeout não era guardado em lugar
       // nenhum e portanto não podia ser cancelado — cada erro nascia um
       // <video> novo por segundo, indefinidamente.
-      errTimer = setTimeout(()=>{ if(g !== geracao) return; avancar(); }, 1500);
+      errTimer = setTimeout(()=>{ if(g !== geracao) return; avancar(false); }, 1500);
     };
 
     // (2) quando (e SE) a duração real ficar disponível — pode vir em
@@ -1112,7 +1122,7 @@ function tocar(){
         // travou de verdade: tira do rodízio para não reciclar o mesmo erro
         if(ultimoTempo === 0) marcarIndisponivel(item.path);
         logar('TRAVOU t='+ultimoTempo.toFixed(1)+'s '+String(item.path).slice(-34));
-        avancar();
+        avancar(false);
       }
     }, 3000);
     window.__vidTimers.push({ tipo:'i', id: vigia });
@@ -1128,7 +1138,7 @@ function tocar(){
       clearTimeout(slideTimer);
       clearTimeout(errTimer);
       marcarIndisponivel(item.path);
-      errTimer = setTimeout(()=>{ if(g !== geracao) return; avancar(); }, 1500);
+      errTimer = setTimeout(()=>{ if(g !== geracao) return; avancar(false); }, 1500);
     };
     slide.appendChild(im);
     // IMAGEM: usa a duração definida no painel (duracao_seg), padrão 8s se nula
@@ -1189,15 +1199,18 @@ function tocar(){
   //  remover o slide visivel antes de o novo ter imagem)
 }
 
-function avancar(){
+function avancar(sucesso){
   clearTimeout(slideTimer);
   clearTimeout(errTimer);
   if(playlist.length === 0) return;
   const anterior = idx;
   idx = (idx + 1) % playlist.length;
   trocas++;
-  // com playlist de 1 item, idx nunca muda -> cada avanco E uma volta
-  if(playlist.length === 1 || (idx === 0 && anterior !== 0)){
+  // com playlist de 1 item, idx nunca muda -> cada avanco E uma volta —
+  // MAS só quando o avanço foi por reprodução completa de verdade, nunca
+  // numa reentativa de erro/travamento (senão um arquivo com problema
+  // reproduz o mesmo bug: "voltas" sobe a cada ~1.5-3s de retry).
+  if(sucesso !== false && (playlist.length === 1 || (idx === 0 && anterior !== 0))){
     voltas++; logar('VOLTA #'+voltas+' concluida');
   }
   tocar();
