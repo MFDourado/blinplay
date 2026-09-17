@@ -587,7 +587,7 @@ function enter(role){
   } else {
     const nomeConta = CLI_ACC && CLI_ACC.nome ? CLI_ACC.nome : 'Cliente';
     const cnpjConta = CLI_ACC && CLI_ACC.cnpj ? CLI_ACC.cnpj : '';
-    pill.innerHTML = '● '+nomeConta + (cnpjConta?` <span class="pill-cnpj">${cnpjConta}</span>`:'');
+    pill.innerHTML = '● '+esc(nomeConta) + (cnpjConta?` <span class="pill-cnpj">${esc(cnpjConta)}</span>`:'');
   }
   buildNav(); render();
 }
@@ -770,7 +770,7 @@ async function render(){
     // pra digitar não fazer o campo de texto perder o foco a cada letra
     if(alvo==='clientes') renderListaClientes(MIDIA_CLI_BUSCA);
   }
-  catch(e){ view.innerHTML='<div class="note" style="background:rgba(244,96,107,.1);border-color:rgba(244,96,107,.3);color:#ffb3ba">Erro ao carregar: '+(e.message||e)+'</div>'; }
+  catch(e){ view.innerHTML='<div class="note" style="background:rgba(244,96,107,.1);border-color:rgba(244,96,107,.3);color:#ffb3ba">Erro ao carregar: '+esc(e.message||e)+'</div>'; }
 }
 
 function topbar(title,sub,actions=''){return `<div class="top"><div><h1>${title}</h1><div class="sub">${sub}</div></div><div class="top-actions">${actions}</div></div>`;}
@@ -2305,10 +2305,20 @@ async function verTela(channelId, nomeCanal){
     const w = document.getElementById('snapWrap');
     const i = document.getElementById('snapInfo');
     if(!w || !i) return false;
+    // snap_data e snap_item vêm do box via RPC, autenticado só pelo
+    // device_token — não são digitados por ninguém aqui no painel, mas
+    // cruzam uma fronteira de confiança (dispositivo -> banco -> tela do
+    // admin). Validamos o alfabeto base64 puro antes de usar no src="", e
+    // escapamos snap_item, pra um token vazado ou um box comprometido não
+    // virar execução de script na sessão de quem está vendo o preview.
+    if(!/^[A-Za-z0-9+/=]+$/.test(r.snap_data)){
+      i.textContent = 'Captura inválida recebida do box.';
+      return true;
+    }
     w.innerHTML = '<img src="data:image/jpeg;base64,'+r.snap_data+'" style="width:100%;display:block">';
     let txt = rotulo;
     try{ txt += ' · '+new Date(r.snap_em).toLocaleString('pt-BR'); }catch(e){}
-    if(r.snap_item) txt += '<br>Na tela: '+r.snap_item;
+    if(r.snap_item) txt += '<br>Na tela: '+esc(r.snap_item);
     i.innerHTML = txt;
     return true;
   };
