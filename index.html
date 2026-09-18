@@ -234,11 +234,32 @@
   .est-tab .n{background:rgba(255,255,255,.08);border-radius:999px;padding:1px 7px;font-size:11px;color:var(--txt)}
   .est-tab.active .n{background:rgba(245,168,0,.22);color:var(--gold)}
 
+  /* ---------- menu mobile (hambúrguer) ---------- */
+  .mobile-topbar{display:none;position:sticky;top:0;z-index:1500;align-items:center;gap:12px;
+    padding:12px 16px;background:linear-gradient(180deg,var(--bg2),var(--bg));border-bottom:1px solid var(--line)}
+  .mobile-topbar .logo{padding:0}
+  .mobile-topbar .logo b{font-size:17px}
+  .mobile-topbar .sym-img{height:24px}
+  .hamburguer{display:flex;flex-direction:column;justify-content:center;gap:4px;width:34px;height:34px;
+    background:var(--surf2);border:1px solid var(--line);border-radius:8px;padding:0;flex-shrink:0}
+  .hamburguer span{display:block;height:2px;width:16px;margin:0 auto;background:var(--txt);border-radius:2px}
+  .fechar-menu-mobile{display:none;position:absolute;top:14px;right:14px;width:30px;height:30px;
+    background:var(--surf2);border:1px solid var(--line);border-radius:8px;color:var(--mut);font-size:15px}
+  .nav-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:2000}
+
   @media(max-width:820px){
-    #app.show{grid-template-columns:1fr}
-    .side{position:static;height:auto;flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px}
-    .side .logo{padding:6px}.role-pill,.nav-sec,.side-foot{display:none}
-    .nav{width:auto}.kpis{grid-template-columns:repeat(2,1fr)}
+    #app.show{display:block}
+    .mobile-topbar{display:flex}
+    .side{position:fixed;top:0;left:0;height:100vh;width:270px;max-width:82vw;
+      transform:translateX(-100%);transition:transform .22s ease;z-index:2001;
+      flex-direction:column;align-items:stretch;gap:4px;overflow-y:auto;box-shadow:20px 0 40px -10px rgba(0,0,0,.6)}
+    .side.mobile-open{transform:translateX(0)}
+    .side > .logo{display:flex}
+    .fechar-menu-mobile{display:flex}
+    .nav-backdrop.show{display:block}
+    .nav{width:100%}
+    .main{padding-top:74px}
+    .kpis{grid-template-columns:repeat(2,1fr)}
     table{font-size:12px}th,td{padding:10px 12px}
   }
 
@@ -356,7 +377,15 @@
 
 <!-- ============ APP ============ -->
 <section id="app">
-  <aside class="side">
+  <div id="mobileTopbar" class="mobile-topbar">
+    <button id="btnHamburguer" class="hamburguer" onclick="toggleMenuMobile()" aria-label="Abrir menu">
+      <span></span><span></span><span></span>
+    </button>
+    <span class="logo"><img class="sym-img" src="img/blinplay-favicon.png" alt=""><b>BlinPlay</b></span>
+  </div>
+  <div id="navBackdrop" class="nav-backdrop" onclick="fecharMenuMobile()"></div>
+  <aside class="side" id="sideNav">
+    <button id="btnFecharMenu" class="fechar-menu-mobile" onclick="fecharMenuMobile()" aria-label="Fechar menu">✕</button>
     <span class="logo"><img class="sym-img" src="img/blinplay-favicon.png" alt=""><b>BlinPlay</b></span>
     <span id="rolePill" class="role-pill"></span>
     <div id="navList"></div>
@@ -726,6 +755,18 @@ function toggleDemo(){ /* removido */ }
 // Aqui, antes de recarregar os dados da tela atual, tentamos renovar a
 // sessão explicitamente (o token de renovação dura muito mais que o de
 // acesso) — só cai pro login se a sessão estiver mesmo perdida de vez.
+function toggleMenuMobile(){
+  const side = document.getElementById('sideNav');
+  const bg = document.getElementById('navBackdrop');
+  const abrindo = !side.classList.contains('mobile-open');
+  side.classList.toggle('mobile-open', abrindo);
+  bg.classList.toggle('show', abrindo);
+}
+function fecharMenuMobile(){
+  document.getElementById('sideNav').classList.remove('mobile-open');
+  document.getElementById('navBackdrop').classList.remove('show');
+}
+
 async function atualizarPainel(){
   const btn = document.getElementById('btnAtualizar');
   if(btn){ btn.disabled = true; btn.style.opacity = '.6'; }
@@ -759,17 +800,17 @@ function buildNav(){
     if(item.sec){ const s=document.createElement('div');s.className='nav-sec';s.textContent=item.sec;el.appendChild(s);return;}
     const b=document.createElement('button'); b.className='nav'+(item.k===CUR?' active':'');
     b.innerHTML=`<span class="ic">${item.ic}</span> ${item.label}`;
-    b.onclick=()=>{CUR=item.k;PROG_CH=null;buildNav();render();}; el.appendChild(b);
+    b.onclick=()=>{CUR=item.k;PROG_CH=null;buildNav();render();fecharMenuMobile();}; el.appendChild(b);
   });
   // gerente de rede: botão pra trocar de hotel + visão geral de todas as unidades
   if(ROLE==='cli' && CLI_ACCS.length>1){
     const sec=document.createElement('div');sec.className='nav-sec';sec.textContent='REDE';el.appendChild(sec);
     const v=document.createElement('button'); v.className='nav'+(CUR==='cli_overview'?' active':'');
     v.innerHTML=`<span class="ic">▦</span> Visão Geral da Rede`;
-    v.onclick=()=>{CUR='cli_overview';buildNav();render();}; el.appendChild(v);
+    v.onclick=()=>{CUR='cli_overview';buildNav();render();fecharMenuMobile();}; el.appendChild(v);
     const t=document.createElement('button');t.className='nav';
     t.innerHTML=`<span class="ic">⇄</span> Trocar de hotel`;
-    t.onclick=trocarHotel; el.appendChild(t);
+    t.onclick=()=>{fecharMenuMobile();trocarHotel();}; el.appendChild(t);
   }
 }
 
