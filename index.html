@@ -734,7 +734,7 @@ async function gerarRelatorio(accountIdFixo){
 // banco) só pra redesenhar quando a pessoa marca/desmarca uma coluna
 function montarPainelRelatorio(){
   const { inicio, fim, canais, midias, contaNome, contaCnpj } = REL_ULTIMO;
-  const img = (midias||[]).find(m=>m.tipo==='imagem') || {total_agora:0, total_periodo:0};
+  const img = (midias||[]).find(m=>m.tipo==='image') || {total_agora:0, total_periodo:0};
   const vid = (midias||[]).find(m=>m.tipo==='video')  || {total_agora:0, total_periodo:0};
   const colunasAtivas = REL_COLUNAS_OPCIONAIS.filter(c=>REL_COLS_VISIVEIS[c.key]);
 
@@ -831,7 +831,7 @@ function exportarRelatorioCSV(){
 function exportarRelatorioPDF(){
   if(!REL_ULTIMO){ alert('Gere o relatório primeiro.'); return; }
   const { inicio, fim, canais, midias, contaNome, contaCnpj } = REL_ULTIMO;
-  const img = midias.find(m=>m.tipo==='imagem') || {total_agora:0, total_periodo:0};
+  const img = midias.find(m=>m.tipo==='image') || {total_agora:0, total_periodo:0};
   const vid = midias.find(m=>m.tipo==='video')  || {total_agora:0, total_periodo:0};
   const colunasAtivas = REL_COLUNAS_OPCIONAIS.filter(c=>REL_COLS_VISIVEIS[c.key]);
 
