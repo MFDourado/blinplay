@@ -709,7 +709,7 @@ async function gerarRelatorio(accountIdFixo){
   try{
     const [{ data: canais, error: e1 }, { data: midias, error: e2 }, { data: conta, error: e3 }] = await Promise.all([
       sb.rpc('relatorio_canais', { p_account_id: accountId, p_inicio: inicio, p_fim: fim }),
-      sb.rpc('relatorio_midias', { p_account_id: accountId }),
+      sb.rpc('relatorio_midias', { p_account_id: accountId, p_inicio: inicio, p_fim: fim }),
       sb.from('accounts').select('nome,cnpj').eq('id', accountId).single(),
     ]);
     if(e1) throw e1;
@@ -734,8 +734,8 @@ async function gerarRelatorio(accountIdFixo){
 // banco) só pra redesenhar quando a pessoa marca/desmarca uma coluna
 function montarPainelRelatorio(){
   const { inicio, fim, canais, midias, contaNome, contaCnpj } = REL_ULTIMO;
-  const totalImg = (midias||[]).find(m=>m.tipo==='imagem');
-  const totalVid = (midias||[]).find(m=>m.tipo==='video');
+  const img = (midias||[]).find(m=>m.tipo==='imagem') || {total_agora:0, total_periodo:0};
+  const vid = (midias||[]).find(m=>m.tipo==='video')  || {total_agora:0, total_periodo:0};
   const colunasAtivas = REL_COLUNAS_OPCIONAIS.filter(c=>REL_COLS_VISIVEIS[c.key]);
 
   const checkboxesHtml = `
@@ -762,10 +762,13 @@ function montarPainelRelatorio(){
 
   return `<div class="panel"><div class="panel-h"><div><h3>${esc(contaNome||'')}</h3>${cnpjLinha}</div><span class="hint">${esc(inicio)} a ${esc(fim)}</span></div>
     <div style="padding:16px 20px;display:flex;gap:24px;flex-wrap:wrap">
-      <div class="kpi"><div class="lab">Mídias · imagem</div><div class="val">${totalImg?totalImg.total:0}</div></div>
-      <div class="kpi"><div class="lab">Mídias · vídeo</div><div class="val">${totalVid?totalVid.total:0}</div></div>
+      <div class="kpi"><div class="lab">Imagens ativas no momento</div><div class="val">${img.total_agora}</div></div>
+      <div class="kpi"><div class="lab">Vídeos ativos no momento</div><div class="val">${vid.total_agora}</div></div>
+      <div class="kpi"><div class="lab">Imagens inseridas no período</div><div class="val">${img.total_periodo}</div></div>
+      <div class="kpi"><div class="lab">Vídeos inseridos no período</div><div class="val">${vid.total_periodo}</div></div>
     </div>
     <div style="padding:0 20px 16px">
+
       <div style="font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Mostrar no relatório (tela, CSV e PDF)</div>
       ${checkboxesHtml}
     </div>
@@ -810,8 +813,8 @@ function exportarRelatorioCSV(){
     linhas.push([c.canal, ...extras, c.dias_online, c.dias_total-c.dias_online, c.dias_total]);
   });
   linhas.push([]);
-  linhas.push(['Mídias por tipo']);
-  midias.forEach(m=> linhas.push([m.tipo, m.total]));
+  linhas.push(['Mídias por tipo', 'Ativas no momento', 'Inseridas no período']);
+  midias.forEach(m=> linhas.push([m.tipo, m.total_agora, m.total_periodo]));
 
   const csv = linhas
     .map(l=> l.map(v=> '"'+csvSeguro(v).replace(/"/g,'""')+'"').join(';'))
@@ -828,8 +831,8 @@ function exportarRelatorioCSV(){
 function exportarRelatorioPDF(){
   if(!REL_ULTIMO){ alert('Gere o relatório primeiro.'); return; }
   const { inicio, fim, canais, midias, contaNome, contaCnpj } = REL_ULTIMO;
-  const totalImg = midias.find(m=>m.tipo==='imagem');
-  const totalVid = midias.find(m=>m.tipo==='video');
+  const img = midias.find(m=>m.tipo==='imagem') || {total_agora:0, total_periodo:0};
+  const vid = midias.find(m=>m.tipo==='video')  || {total_agora:0, total_periodo:0};
   const colunasAtivas = REL_COLUNAS_OPCIONAIS.filter(c=>REL_COLS_VISIVEIS[c.key]);
 
   const linhas = canais.map(c=>{
@@ -858,8 +861,10 @@ function exportarRelatorioPDF(){
     ${(REL_COLS_VISIVEIS.cnpj && contaCnpj) ? `<div class="sub">CNPJ: ${esc(contaCnpj)}</div>` : ''}
     <div class="sub">Período: ${esc(inicio)} a ${esc(fim)}</div>
     <div class="kpis">
-      <div class="kpi">Mídias (imagem)<b>${totalImg?totalImg.total:0}</b></div>
-      <div class="kpi">Mídias (vídeo)<b>${totalVid?totalVid.total:0}</b></div>
+      <div class="kpi">Imagens ativas no momento<b>${img.total_agora}</b></div>
+      <div class="kpi">Vídeos ativos no momento<b>${vid.total_agora}</b></div>
+      <div class="kpi">Imagens inseridas no período<b>${img.total_periodo}</b></div>
+      <div class="kpi">Vídeos inseridos no período<b>${vid.total_periodo}</b></div>
     </div>
     <table><thead><tr><th>Canal</th>${colunasAtivas.map(c=>`<th>${c.label}</th>`).join('')}<th>Dias online</th><th>Dias offline</th><th>Dias no período</th></tr></thead>
       <tbody>${linhas}</tbody></table>
