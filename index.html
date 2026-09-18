@@ -553,43 +553,31 @@ function filtrarCliOverview(v){
   if(bodyEl) bodyEl.innerHTML = linhasCliOverview(nomePorConta);
 }
 
-/* ---- Busca com sugestão (autocomplete) pra escolher conta/hotel ----
-   Usado em Widgets e Relatórios: com 1000+ unidades, um <select> rolando
-   não escala; digitar e filtrar sim. */
+/* ---- Busca com sugestão pra escolher conta/hotel (Widgets e Relatórios) ----
+   Lista TODOS de cara, clicável, e digitar só filtra a mesma lista — sem
+   caixa flutuante (que ficava cortada pelo overflow:hidden do painel). */
+function listaContasHtml(prefixo, lista, termo){
+  const t = (termo||'').trim().toLowerCase();
+  const filtradas = t ? lista.filter(a=> (a.nome||'').toLowerCase().includes(t)) : lista;
+  if(!filtradas.length) return '<div style="padding:10px 14px;color:var(--mut);font-size:12.5px">Nenhum hotel encontrado</div>';
+  return filtradas.map(a=>
+    `<div onclick='selecionarContaSugestao("${prefixo}","${a.id}","${escJ(a.nome)}")'
+       style="padding:9px 14px;cursor:pointer;font-size:13px;color:var(--txt);border-bottom:1px solid var(--line)"
+       onmouseover="this.style.background='var(--surf2)'" onmouseout="this.style.background='transparent'">
+       ${esc(a.nome)}
+     </div>`
+  ).join('');
+}
 function buscarContaSugestao(prefixo, termo){
   const lista = prefixo==='wg' ? WG_ACCS : REL_ACCS;
   const box = document.getElementById(prefixo+'Sugestoes');
-  if(!box) return;
-  const t = (termo||'').trim().toLowerCase();
-  const filtradas = t ? lista.filter(a=> (a.nome||'').toLowerCase().includes(t)) : lista;
-
-  if(!filtradas.length){
-    box.innerHTML = '<div style="padding:10px 14px;color:var(--mut);font-size:12.5px">Nenhum hotel encontrado</div>';
-  } else {
-    // até 50 por vez — digitar mais 1 letra já filtra o resto, não precisa listar tudo
-    box.innerHTML = filtradas.slice(0,50).map(a=>
-      `<div onmousedown="selecionarContaSugestao('${prefixo}','${a.id}','${escJ(a.nome)}')"
-         style="padding:9px 14px;cursor:pointer;font-size:13px;color:var(--txt)"
-         onmouseover="this.style.background='var(--surf2)'" onmouseout="this.style.background='transparent'">
-         ${esc(a.nome)}
-       </div>`
-    ).join('');
-  }
-  box.style.display = 'block';
+  if(box) box.innerHTML = listaContasHtml(prefixo, lista, termo);
 }
 function selecionarContaSugestao(prefixo, id, nome){
   document.getElementById(prefixo+'Busca').value = nome;
   document.getElementById(prefixo+'ContaSel').value = id;
-  document.getElementById(prefixo+'Sugestoes').style.display = 'none';
   if(prefixo==='wg') abrirWidgetsConta(id);
 }
-document.addEventListener('click', (e)=>{
-  ['wg','rel'].forEach(p=>{
-    const box = document.getElementById(p+'Sugestoes');
-    const input = document.getElementById(p+'Busca');
-    if(box && input && e.target!==input && !box.contains(e.target)) box.style.display='none';
-  });
-});
 
 /* ---- Widgets: conteúdo pronto por conta ---- */
 async function abrirWidgetsConta(accountId){
@@ -1660,13 +1648,12 @@ const VIEWS = {
     WG_ACCS = accs || [];
     return topbar('Widgets','Conteúdo pronto (clima, hora certa, loteria...) pra completar a programação dos seus clientes','')
       + `<div class="panel"><div class="panel-h"><h3>Escolha a conta</h3></div>
-          <div style="padding:16px 20px;position:relative;max-width:420px">
-            <input type="text" id="wgBusca" placeholder="Digite o nome do hotel…" autocomplete="off"
-              oninput="buscarContaSugestao('wg', this.value)" onfocus="buscarContaSugestao('wg', this.value)"
-              style="width:100%;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:10px 12px;font-size:13px;box-sizing:border-box">
+          <div style="padding:16px 20px;max-width:420px">
+            <input type="text" id="wgBusca" placeholder="Digite pra filtrar ou escolha abaixo…" autocomplete="off"
+              oninput="buscarContaSugestao('wg', this.value)"
+              style="width:100%;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:10px 12px;font-size:13px;box-sizing:border-box;margin-bottom:10px">
             <input type="hidden" id="wgContaSel">
-            <div id="wgSugestoes" style="display:none;position:absolute;left:20px;right:20px;z-index:50;
-              background:#15151c;border:1px solid var(--line);border-radius:8px;margin-top:4px;max-height:260px;overflow-y:auto;box-shadow:0 20px 40px -10px rgba(0,0,0,.6)"></div>
+            <div id="wgSugestoes" style="max-height:280px;overflow-y:auto;border:1px solid var(--line);border-radius:8px">${listaContasHtml('wg', WG_ACCS, '')}</div>
           </div></div>
         <div id="wgPainelConta"></div>`;
   },
@@ -1680,14 +1667,13 @@ const VIEWS = {
     return topbar('Relatórios','Dias online/offline e mídias por período, por conta','')
       + `<div class="panel"><div class="panel-h"><h3>Gerar relatório</h3></div>
           <div style="padding:16px 20px;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
-            <div style="position:relative;min-width:240px">
+            <div style="min-width:240px;max-width:280px">
               <label style="font-size:12px;color:var(--mut);display:block;margin-bottom:5px">Conta</label>
-              <input type="text" id="relBusca" placeholder="Digite o nome do hotel…" autocomplete="off"
-                oninput="buscarContaSugestao('rel', this.value)" onfocus="buscarContaSugestao('rel', this.value)"
-                style="width:100%;height:38px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:0 12px;font-size:13px;box-sizing:border-box">
+              <input type="text" id="relBusca" placeholder="Digite pra filtrar…" autocomplete="off"
+                oninput="buscarContaSugestao('rel', this.value)"
+                style="width:100%;height:38px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:0 12px;font-size:13px;box-sizing:border-box;margin-bottom:8px">
               <input type="hidden" id="relContaSel">
-              <div id="relSugestoes" style="display:none;position:absolute;left:0;right:0;z-index:50;
-                background:#15151c;border:1px solid var(--line);border-radius:8px;margin-top:4px;max-height:260px;overflow-y:auto;box-shadow:0 20px 40px -10px rgba(0,0,0,.6)"></div>
+              <div id="relSugestoes" style="max-height:200px;overflow-y:auto;border:1px solid var(--line);border-radius:8px">${listaContasHtml('rel', REL_ACCS, '')}</div>
             </div>
             <div><label style="font-size:12px;color:var(--mut);display:block;margin-bottom:5px">De</label>
               <input id="relInicio" type="date" value="${mesPassado}" style="height:38px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:0 12px;font-size:13px;box-sizing:border-box"></div>
