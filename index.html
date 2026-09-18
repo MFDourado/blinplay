@@ -685,6 +685,14 @@ function cardWidgetHtml(def, accountId, existente, canais, canaisSelecionados){
 }
 
 /* ---- Relatórios: dias online/offline + mídias, admin e cliente ---- */
+const REL_COLUNAS_OPCIONAIS = [
+  { key:'mac', label:'MAC' },
+  { key:'ultimo_ip', label:'Último IP' },
+  { key:'player_version', label:'Versão' },
+  { key:'last_seen_at', label:'Último acesso' },
+];
+let REL_COLS_VISIVEIS = { cnpj:true, mac:true, ultimo_ip:true, player_version:true, last_seen_at:true };
+
 async function gerarRelatorio(accountIdFixo){
   const sel = document.getElementById('relContaSel');
   const accountId = accountIdFixo || (sel ? sel.value : '');
@@ -699,40 +707,80 @@ async function gerarRelatorio(accountIdFixo){
   area.innerHTML = '<div class="panel"><div class="loading">Gerando…</div></div>';
 
   try{
-    const [{ data: canais, error: e1 }, { data: midias, error: e2 }] = await Promise.all([
+    const [{ data: canais, error: e1 }, { data: midias, error: e2 }, { data: conta, error: e3 }] = await Promise.all([
       sb.rpc('relatorio_canais', { p_account_id: accountId, p_inicio: inicio, p_fim: fim }),
       sb.rpc('relatorio_midias', { p_account_id: accountId }),
+      sb.from('accounts').select('nome,cnpj').eq('id', accountId).single(),
     ]);
     if(e1) throw e1;
     if(e2) throw e2;
+    if(e3) throw e3;
 
-    REL_ULTIMO = { accountId, inicio, fim, canais: canais||[], midias: midias||[] };
+    REL_ULTIMO = {
+      accountId, inicio, fim, canais: canais||[], midias: midias||[],
+      contaNome: (conta&&conta.nome)||'', contaCnpj: (conta&&conta.cnpj)||'',
+    };
+    // sempre reabre com tudo visível — decisão de ocultar não fica "presa"
+    // de um relatório anterior sem a pessoa perceber
+    REL_COLS_VISIVEIS = { cnpj:true, mac:true, ultimo_ip:true, player_version:true, last_seen_at:true };
 
-    const nomeConta = ROLE==='admin'
-      ? (REL_ACCS.find(a=>a.id===accountId)||{}).nome
-      : (CLI_ACCS.find(a=>a.id===accountId)||{}).nome;
-
-    const linhasCanais = (canais&&canais.length) ? canais.map(c=>
-      `<tr><td>${esc(c.canal)}</td><td>${c.dias_online}</td><td>${c.dias_total-c.dias_online}</td><td>${c.dias_total}</td></tr>`
-    ).join('') : '<tr><td colspan="4"><div class="empty"><b>Sem dados nesse período</b></div></td></tr>';
-
-    const totalImg = (midias||[]).find(m=>m.tipo==='imagem');
-    const totalVid = (midias||[]).find(m=>m.tipo==='video');
-
-    area.innerHTML = `<div class="panel"><div class="panel-h"><h3>${esc(nomeConta||'')}</h3><span class="hint">${esc(inicio)} a ${esc(fim)}</span></div>
-      <div style="padding:16px 20px;display:flex;gap:24px;flex-wrap:wrap">
-        <div class="kpi"><div class="lab">Mídias · imagem</div><div class="val">${totalImg?totalImg.total:0}</div></div>
-        <div class="kpi"><div class="lab">Mídias · vídeo</div><div class="val">${totalVid?totalVid.total:0}</div></div>
-      </div>
-      <table><thead><tr><th>Canal</th><th>Dias online</th><th>Dias offline</th><th>Dias no período</th></tr></thead>
-        <tbody>${linhasCanais}</tbody></table>
-      <div style="padding:16px 20px;display:flex;gap:8px">
-        <button class="ghost" onclick="exportarRelatorioCSV()">⬇ Exportar CSV</button>
-        <button class="ghost" onclick="exportarRelatorioPDF()">⬇ Exportar PDF</button>
-      </div></div>`;
+    area.innerHTML = montarPainelRelatorio();
   }catch(e){
     area.innerHTML = `<div class="panel"><div class="empty"><b>Erro ao gerar relatório</b>${esc((e&&e.message)||String(e))}</div></div>`;
   }
+}
+
+// separado do gerarRelatorio() pra poder ser chamado de novo (sem bater no
+// banco) só pra redesenhar quando a pessoa marca/desmarca uma coluna
+function montarPainelRelatorio(){
+  const { inicio, fim, canais, midias, contaNome, contaCnpj } = REL_ULTIMO;
+  const totalImg = (midias||[]).find(m=>m.tipo==='imagem');
+  const totalVid = (midias||[]).find(m=>m.tipo==='video');
+  const colunasAtivas = REL_COLUNAS_OPCIONAIS.filter(c=>REL_COLS_VISIVEIS[c.key]);
+
+  const checkboxesHtml = `
+    <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--mut);margin-right:16px">
+      <input type="checkbox" ${REL_COLS_VISIVEIS.cnpj?'checked':''} onchange="alternarColunaRelatorio('cnpj', this.checked)"> CNPJ
+    </label>
+    ${REL_COLUNAS_OPCIONAIS.map(c=>
+      `<label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--mut);margin-right:16px">
+        <input type="checkbox" ${REL_COLS_VISIVEIS[c.key]?'checked':''} onchange="alternarColunaRelatorio('${c.key}', this.checked)"> ${c.label}
+      </label>`
+    ).join('')}`;
+
+  const formatarValor = (chave, valor)=>{
+    if(chave==='last_seen_at') return valor ? esc(new Date(valor).toLocaleString('pt-BR')) : '—';
+    return valor ? esc(valor) : '—';
+  };
+
+  const linhasCanais = (canais&&canais.length) ? canais.map(c=>{
+    const extras = colunasAtivas.map(cc=> `<td>${formatarValor(cc.key, c[cc.key])}</td>`).join('');
+    return `<tr><td>${esc(c.canal)}</td>${extras}<td>${c.dias_online}</td><td>${c.dias_total-c.dias_online}</td><td>${c.dias_total}</td></tr>`;
+  }).join('') : `<tr><td colspan="${4+colunasAtivas.length}"><div class="empty"><b>Sem dados nesse período</b></div></td></tr>`;
+
+  const cnpjLinha = (REL_COLS_VISIVEIS.cnpj && contaCnpj) ? `<div style="color:var(--mut);font-size:12.5px;margin-top:2px">CNPJ: ${esc(contaCnpj)}</div>` : '';
+
+  return `<div class="panel"><div class="panel-h"><div><h3>${esc(contaNome||'')}</h3>${cnpjLinha}</div><span class="hint">${esc(inicio)} a ${esc(fim)}</span></div>
+    <div style="padding:16px 20px;display:flex;gap:24px;flex-wrap:wrap">
+      <div class="kpi"><div class="lab">Mídias · imagem</div><div class="val">${totalImg?totalImg.total:0}</div></div>
+      <div class="kpi"><div class="lab">Mídias · vídeo</div><div class="val">${totalVid?totalVid.total:0}</div></div>
+    </div>
+    <div style="padding:0 20px 16px">
+      <div style="font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Mostrar no relatório (tela, CSV e PDF)</div>
+      ${checkboxesHtml}
+    </div>
+    <table><thead><tr><th>Canal</th>${colunasAtivas.map(c=>`<th>${c.label}</th>`).join('')}<th>Dias online</th><th>Dias offline</th><th>Dias no período</th></tr></thead>
+      <tbody>${linhasCanais}</tbody></table>
+    <div style="padding:16px 20px;display:flex;gap:8px">
+      <button class="ghost" onclick="exportarRelatorioCSV()">⬇ Exportar CSV</button>
+      <button class="ghost" onclick="exportarRelatorioPDF()">⬇ Exportar PDF</button>
+    </div></div>`;
+}
+
+function alternarColunaRelatorio(chave, valor){
+  REL_COLS_VISIVEIS[chave] = valor;
+  const area = document.getElementById('relResultado');
+  if(area) area.innerHTML = montarPainelRelatorio();
 }
 
 function csvSeguro(v){
@@ -744,14 +792,28 @@ function csvSeguro(v){
 
 function exportarRelatorioCSV(){
   if(!REL_ULTIMO){ alert('Gere o relatório primeiro.'); return; }
-  const { inicio, fim, canais, midias } = REL_ULTIMO;
-  const cab = ['Canal','Dias online','Dias offline','Dias no período'];
-  const linhas = canais.map(c=>[c.canal, c.dias_online, c.dias_total-c.dias_online, c.dias_total]);
+  const { inicio, fim, canais, midias, contaNome, contaCnpj } = REL_ULTIMO;
+  const colunasAtivas = REL_COLUNAS_OPCIONAIS.filter(c=>REL_COLS_VISIVEIS[c.key]);
+
+  const linhas = [];
+  linhas.push(['Conta', contaNome||'']);
+  if(REL_COLS_VISIVEIS.cnpj && contaCnpj) linhas.push(['CNPJ', contaCnpj]);
+  linhas.push(['Período', inicio+' a '+fim]);
+  linhas.push([]);
+  linhas.push(['Canal', ...colunasAtivas.map(c=>c.label), 'Dias online','Dias offline','Dias no período']);
+  canais.forEach(c=>{
+    const extras = colunasAtivas.map(cc=>{
+      let v = c[cc.key];
+      if(cc.key==='last_seen_at') v = v ? new Date(v).toLocaleString('pt-BR') : '';
+      return v||'';
+    });
+    linhas.push([c.canal, ...extras, c.dias_online, c.dias_total-c.dias_online, c.dias_total]);
+  });
   linhas.push([]);
   linhas.push(['Mídias por tipo']);
   midias.forEach(m=> linhas.push([m.tipo, m.total]));
 
-  const csv = [cab, ...linhas]
+  const csv = linhas
     .map(l=> l.map(v=> '"'+csvSeguro(v).replace(/"/g,'""')+'"').join(';'))
     .join('\r\n');
   const blob = new Blob(['\ufeff'+csv], { type:'text/csv;charset=utf-8' });
@@ -765,12 +827,19 @@ function exportarRelatorioCSV(){
 
 function exportarRelatorioPDF(){
   if(!REL_ULTIMO){ alert('Gere o relatório primeiro.'); return; }
-  const { inicio, fim, canais, midias } = REL_ULTIMO;
+  const { inicio, fim, canais, midias, contaNome, contaCnpj } = REL_ULTIMO;
   const totalImg = midias.find(m=>m.tipo==='imagem');
   const totalVid = midias.find(m=>m.tipo==='video');
-  const linhas = canais.map(c=>
-    `<tr><td>${esc(c.canal)}</td><td>${c.dias_online}</td><td>${c.dias_total-c.dias_online}</td><td>${c.dias_total}</td></tr>`
-  ).join('');
+  const colunasAtivas = REL_COLUNAS_OPCIONAIS.filter(c=>REL_COLS_VISIVEIS[c.key]);
+
+  const linhas = canais.map(c=>{
+    const extras = colunasAtivas.map(cc=>{
+      let v = c[cc.key];
+      if(cc.key==='last_seen_at') v = v ? new Date(v).toLocaleString('pt-BR') : '';
+      return `<td>${esc(v||'—')}</td>`;
+    }).join('');
+    return `<tr><td>${esc(c.canal)}</td>${extras}<td>${c.dias_online}</td><td>${c.dias_total-c.dias_online}</td><td>${c.dias_total}</td></tr>`;
+  }).join('');
 
   // PDF via impressão do navegador: zero biblioteca nova, funciona em
   // qualquer computador — a pessoa escolhe "Salvar como PDF" na impressora.
@@ -785,13 +854,14 @@ function exportarRelatorioPDF(){
       .kpis{display:flex;gap:24px;margin:14px 0}
       .kpi b{font-size:20px;display:block}
     </style></head><body>
-    <h1>Relatório BlinPlay</h1>
+    <h1>Relatório BlinPlay — ${esc(contaNome||'')}</h1>
+    ${(REL_COLS_VISIVEIS.cnpj && contaCnpj) ? `<div class="sub">CNPJ: ${esc(contaCnpj)}</div>` : ''}
     <div class="sub">Período: ${esc(inicio)} a ${esc(fim)}</div>
     <div class="kpis">
       <div class="kpi">Mídias (imagem)<b>${totalImg?totalImg.total:0}</b></div>
       <div class="kpi">Mídias (vídeo)<b>${totalVid?totalVid.total:0}</b></div>
     </div>
-    <table><thead><tr><th>Canal</th><th>Dias online</th><th>Dias offline</th><th>Dias no período</th></tr></thead>
+    <table><thead><tr><th>Canal</th>${colunasAtivas.map(c=>`<th>${c.label}</th>`).join('')}<th>Dias online</th><th>Dias offline</th><th>Dias no período</th></tr></thead>
       <tbody>${linhas}</tbody></table>
     <script>window.onload = function(){ window.print(); };<\/script>
     </body></html>`;
