@@ -484,6 +484,7 @@ const NAV = {
     {sec:'GESTÃO'},
     {k:'contas',   ic:'⬡', label:'Contas / Hotéis'},
     {k:'usuarios', ic:'◉', label:'Usuários & Acessos'},
+    {k:'relatorios', ic:'▥', label:'Relatórios'},
   ],
   cli:[
     {sec:'MEU CANAL'},
@@ -492,11 +493,14 @@ const NAV = {
     {k:'prog',     ic:'☰', label:'Montar Programação'},
     {k:'cli_camp', ic:'◷', label:'Minhas Campanhas'},
     {k:'cli_canais',ic:'▤',label:'Meus Canais'},
+    {k:'cli_relatorio',ic:'▥',label:'Meu Relatório'},
   ]
 };
 let EST_CHS = [], EST_NPL = {}, EST_FILTRO = 'todos';
 let CLI_OV_CHS = [], CLI_OV_FILTRO = null;
 let WG_ACCS = [];
+let REL_ACCS = [];
+let REL_ULTIMO = null; // último relatório gerado, guardado pra exportar sem recalcular
 const WIDGET_DEFS = [
   {tipo:'hora',       nome:'Hora certa',            desc:'Relógio em tempo real, sem depender de nada externo.'},
   {tipo:'data',       nome:'Data / dia da semana',  desc:'Data atual por extenso, sem depender de nada externo.'},
@@ -628,6 +632,124 @@ function cardWidgetHtml(def, accountId, existente, canais, canaisSelecionados){
     </div>
     <div id="wg_${def.tipo}_msg" class="fmsg" style="margin-top:6px"></div>
   </div>`;
+}
+
+/* ---- Relatórios: dias online/offline + mídias, admin e cliente ---- */
+async function gerarRelatorio(accountIdFixo){
+  const sel = document.getElementById('relContaSel');
+  const accountId = accountIdFixo || (sel ? sel.value : '');
+  const inicio = document.getElementById('relInicio').value;
+  const fim = document.getElementById('relFim').value;
+  const area = document.getElementById('relResultado');
+
+  if(!accountId){ alert('Selecione uma conta/unidade.'); return; }
+  if(!inicio || !fim){ alert('Preencha as duas datas.'); return; }
+  if(inicio > fim){ alert('A data inicial não pode ser depois da final.'); return; }
+
+  area.innerHTML = '<div class="panel"><div class="loading">Gerando…</div></div>';
+
+  try{
+    const [{ data: canais, error: e1 }, { data: midias, error: e2 }] = await Promise.all([
+      sb.rpc('relatorio_canais', { p_account_id: accountId, p_inicio: inicio, p_fim: fim }),
+      sb.rpc('relatorio_midias', { p_account_id: accountId }),
+    ]);
+    if(e1) throw e1;
+    if(e2) throw e2;
+
+    REL_ULTIMO = { accountId, inicio, fim, canais: canais||[], midias: midias||[] };
+
+    const nomeConta = ROLE==='admin'
+      ? (REL_ACCS.find(a=>a.id===accountId)||{}).nome
+      : (CLI_ACCS.find(a=>a.id===accountId)||{}).nome;
+
+    const linhasCanais = (canais&&canais.length) ? canais.map(c=>
+      `<tr><td>${esc(c.canal)}</td><td>${c.dias_online}</td><td>${c.dias_total-c.dias_online}</td><td>${c.dias_total}</td></tr>`
+    ).join('') : '<tr><td colspan="4"><div class="empty"><b>Sem dados nesse período</b></div></td></tr>';
+
+    const totalImg = (midias||[]).find(m=>m.tipo==='imagem');
+    const totalVid = (midias||[]).find(m=>m.tipo==='video');
+
+    area.innerHTML = `<div class="panel"><div class="panel-h"><h3>${esc(nomeConta||'')}</h3><span class="hint">${esc(inicio)} a ${esc(fim)}</span></div>
+      <div style="padding:16px 20px;display:flex;gap:24px;flex-wrap:wrap">
+        <div class="kpi"><div class="lab">Mídias · imagem</div><div class="val">${totalImg?totalImg.total:0}</div></div>
+        <div class="kpi"><div class="lab">Mídias · vídeo</div><div class="val">${totalVid?totalVid.total:0}</div></div>
+      </div>
+      <table><thead><tr><th>Canal</th><th>Dias online</th><th>Dias offline</th><th>Dias no período</th></tr></thead>
+        <tbody>${linhasCanais}</tbody></table>
+      <div style="padding:16px 20px;display:flex;gap:8px">
+        <button class="ghost" onclick="exportarRelatorioCSV()">⬇ Exportar CSV</button>
+        <button class="ghost" onclick="exportarRelatorioPDF()">⬇ Exportar PDF</button>
+      </div></div>`;
+  }catch(e){
+    area.innerHTML = `<div class="panel"><div class="empty"><b>Erro ao gerar relatório</b>${esc((e&&e.message)||String(e))}</div></div>`;
+  }
+}
+
+function csvSeguro(v){
+  // mesma proteção contra fórmula de Excel já usada na exportação de
+  // Dispositivos — reaproveitada aqui, não é uma regra nova.
+  const t = String(v==null?'':v);
+  return /^[=+\-@\t\r]/.test(t) ? "'"+t : t;
+}
+
+function exportarRelatorioCSV(){
+  if(!REL_ULTIMO){ alert('Gere o relatório primeiro.'); return; }
+  const { inicio, fim, canais, midias } = REL_ULTIMO;
+  const cab = ['Canal','Dias online','Dias offline','Dias no período'];
+  const linhas = canais.map(c=>[c.canal, c.dias_online, c.dias_total-c.dias_online, c.dias_total]);
+  linhas.push([]);
+  linhas.push(['Mídias por tipo']);
+  midias.forEach(m=> linhas.push([m.tipo, m.total]));
+
+  const csv = [cab, ...linhas]
+    .map(l=> l.map(v=> '"'+csvSeguro(v).replace(/"/g,'""')+'"').join(';'))
+    .join('\r\n');
+  const blob = new Blob(['\ufeff'+csv], { type:'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'relatorio-blinplay-'+inicio+'-a-'+fim+'.csv';
+  a.click();
+  const href = a.href;
+  setTimeout(()=> URL.revokeObjectURL(href), 0);
+}
+
+function exportarRelatorioPDF(){
+  if(!REL_ULTIMO){ alert('Gere o relatório primeiro.'); return; }
+  const { inicio, fim, canais, midias } = REL_ULTIMO;
+  const totalImg = midias.find(m=>m.tipo==='imagem');
+  const totalVid = midias.find(m=>m.tipo==='video');
+  const linhas = canais.map(c=>
+    `<tr><td>${esc(c.canal)}</td><td>${c.dias_online}</td><td>${c.dias_total-c.dias_online}</td><td>${c.dias_total}</td></tr>`
+  ).join('');
+
+  // PDF via impressão do navegador: zero biblioteca nova, funciona em
+  // qualquer computador — a pessoa escolhe "Salvar como PDF" na impressora.
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Relatório BlinPlay</title>
+    <style>
+      body{font-family:Arial,sans-serif;color:#111;padding:30px}
+      h1{font-size:20px;margin-bottom:4px}
+      .sub{color:#555;font-size:13px;margin-bottom:20px}
+      table{width:100%;border-collapse:collapse;margin-top:10px}
+      th,td{border:1px solid #ccc;padding:8px 10px;font-size:13px;text-align:left}
+      th{background:#f2f2f2}
+      .kpis{display:flex;gap:24px;margin:14px 0}
+      .kpi b{font-size:20px;display:block}
+    </style></head><body>
+    <h1>Relatório BlinPlay</h1>
+    <div class="sub">Período: ${esc(inicio)} a ${esc(fim)}</div>
+    <div class="kpis">
+      <div class="kpi">Mídias (imagem)<b>${totalImg?totalImg.total:0}</b></div>
+      <div class="kpi">Mídias (vídeo)<b>${totalVid?totalVid.total:0}</b></div>
+    </div>
+    <table><thead><tr><th>Canal</th><th>Dias online</th><th>Dias offline</th><th>Dias no período</th></tr></thead>
+      <tbody>${linhas}</tbody></table>
+    <script>window.onload = function(){ window.print(); };<\/script>
+    </body></html>`;
+
+  const win = window.open('', '_blank');
+  if(!win){ alert('O navegador bloqueou a nova aba. Permita pop-ups pra esse site e tente de novo.'); return; }
+  win.document.write(html);
+  win.document.close();
 }
 
 async function buscarCidadeCNPJ(accountId){
@@ -1503,6 +1625,60 @@ const VIEWS = {
             </select>
           </div></div>
         <div id="wgPainelConta"></div>`;
+  },
+
+  // ADMIN — relatório de dias online/offline + mídias, por conta e período
+  async relatorios(){
+    const { data: accs } = await sb.from('accounts').select('id,nome').eq('ativo',true).order('nome');
+    REL_ACCS = accs || [];
+    const opts = REL_ACCS.map(a=>`<option value="${a.id}">${esc(a.nome)}</option>`).join('');
+    const hoje = new Date().toISOString().slice(0,10);
+    const mesPassado = new Date(Date.now()-29*86400000).toISOString().slice(0,10);
+    return topbar('Relatórios','Dias online/offline e mídias por período, por conta','')
+      + `<div class="panel"><div class="panel-h"><h3>Gerar relatório</h3></div>
+          <div style="padding:16px 20px;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
+            <div><label style="font-size:12px;color:var(--mut);display:block;margin-bottom:5px">Conta</label>
+              <select id="relContaSel" style="min-width:220px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:9px 12px;font-size:13px">
+                <option value="">Selecione…</option>${opts}
+              </select></div>
+            <div><label style="font-size:12px;color:var(--mut);display:block;margin-bottom:5px">De</label>
+              <input id="relInicio" type="date" value="${mesPassado}" style="background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:9px 12px;font-size:13px"></div>
+            <div><label style="font-size:12px;color:var(--mut);display:block;margin-bottom:5px">Até</label>
+              <input id="relFim" type="date" value="${hoje}" style="background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:9px 12px;font-size:13px"></div>
+            <button class="solid" onclick="gerarRelatorio()">Gerar</button>
+          </div></div>
+        <div id="relResultado"></div>`;
+  },
+
+  // CLIENTE — mesma tela, adaptada: 1 unidade = já vem fixo; gerente de
+  // rede (várias unidades) = seletor só com as unidades DELE, nunca de
+  // outros clientes.
+  async cli_relatorio(){
+    if(!CLI_ACCS || CLI_ACCS.length===0) return '';
+    const hoje = new Date().toISOString().slice(0,10);
+    const mesPassado = new Date(Date.now()-29*86400000).toISOString().slice(0,10);
+    const rede = CLI_ACCS.length > 1;
+
+    const seletorConta = rede
+      ? `<div><label style="font-size:12px;color:var(--mut);display:block;margin-bottom:5px">Unidade</label>
+          <select id="relContaSel" style="min-width:220px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:9px 12px;font-size:13px">
+            <option value="">Selecione…</option>
+            ${CLI_ACCS.map(a=>`<option value="${a.id}">${esc(a.nome)}</option>`).join('')}
+          </select></div>`
+      : '';
+    const botao = rede ? `onclick="gerarRelatorio()"` : `onclick="gerarRelatorio('${CLI_ACC.id}')"`;
+
+    return topbar(rede?'Meus Relatórios':(CLI_ACC?CLI_ACC.nome:'Meu Relatório'), rede?'Escolha a unidade e o período':'')
+      + `<div class="panel"><div class="panel-h"><h3>Gerar relatório</h3></div>
+          <div style="padding:16px 20px;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
+            ${seletorConta}
+            <div><label style="font-size:12px;color:var(--mut);display:block;margin-bottom:5px">De</label>
+              <input id="relInicio" type="date" value="${mesPassado}" style="background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:9px 12px;font-size:13px"></div>
+            <div><label style="font-size:12px;color:var(--mut);display:block;margin-bottom:5px">Até</label>
+              <input id="relFim" type="date" value="${hoje}" style="background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:9px 12px;font-size:13px"></div>
+            <button class="solid" ${botao}>Gerar</button>
+          </div></div>
+        <div id="relResultado"></div>`;
   },
 };
 
