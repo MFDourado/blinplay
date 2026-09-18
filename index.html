@@ -568,15 +568,39 @@ function listaContasHtml(prefixo, lista, termo){
      </div>`
   ).join('');
 }
+// dois estados pro seletor de conta: "buscando" (campo + lista) e
+// "selecionado" (chip verde + botão pra trocar) — clicar num nome troca
+// de um estado pro outro, em vez de deixar tudo visível ao mesmo tempo.
+function contaAreaBuscaHtml(prefixo, lista){
+  return `<input type="text" id="${prefixo}Busca" placeholder="Digite pra filtrar…" autocomplete="off"
+      oninput="buscarContaSugestao('${prefixo}', this.value)"
+      style="width:100%;height:38px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:0 12px;font-size:13px;box-sizing:border-box;margin-bottom:8px">
+    <input type="hidden" id="${prefixo}ContaSel">
+    <div id="${prefixo}Sugestoes" style="max-height:240px;overflow-y:auto;border:1px solid var(--line);border-radius:8px">${listaContasHtml(prefixo, lista, '')}</div>`;
+}
+function contaAreaSelecionadaHtml(prefixo, id, nome){
+  return `<div style="display:flex;align-items:center;gap:9px;height:38px;padding:0 12px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);box-sizing:border-box">
+      <span style="color:#3ddc84;font-size:15px;line-height:1">●</span>
+      <b style="font-size:13px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(nome)}</b>
+      <button type="button" class="mini" onclick="trocarConta('${prefixo}')">Trocar</button>
+    </div>
+    <input type="hidden" id="${prefixo}ContaSel" value="${escA(id)}">`;
+}
 function buscarContaSugestao(prefixo, termo){
   const lista = prefixo==='wg' ? WG_ACCS : REL_ACCS;
   const box = document.getElementById(prefixo+'Sugestoes');
   if(box) box.innerHTML = listaContasHtml(prefixo, lista, termo);
 }
 function selecionarContaSugestao(prefixo, id, nome){
-  document.getElementById(prefixo+'Busca').value = nome;
-  document.getElementById(prefixo+'ContaSel').value = id;
+  const area = document.getElementById(prefixo+'ContaArea');
+  if(area) area.innerHTML = contaAreaSelecionadaHtml(prefixo, id, nome);
   if(prefixo==='wg') abrirWidgetsConta(id);
+}
+function trocarConta(prefixo){
+  const lista = prefixo==='wg' ? WG_ACCS : REL_ACCS;
+  const area = document.getElementById(prefixo+'ContaArea');
+  if(area) area.innerHTML = contaAreaBuscaHtml(prefixo, lista);
+  if(prefixo==='wg'){ const p=document.getElementById('wgPainelConta'); if(p) p.innerHTML=''; }
 }
 
 /* ---- Widgets: conteúdo pronto por conta ---- */
@@ -1648,13 +1672,7 @@ const VIEWS = {
     WG_ACCS = accs || [];
     return topbar('Widgets','Conteúdo pronto (clima, hora certa, loteria...) pra completar a programação dos seus clientes','')
       + `<div class="panel"><div class="panel-h"><h3>Escolha a conta</h3></div>
-          <div style="padding:16px 20px;max-width:420px">
-            <input type="text" id="wgBusca" placeholder="Digite pra filtrar ou escolha abaixo…" autocomplete="off"
-              oninput="buscarContaSugestao('wg', this.value)"
-              style="width:100%;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:10px 12px;font-size:13px;box-sizing:border-box;margin-bottom:10px">
-            <input type="hidden" id="wgContaSel">
-            <div id="wgSugestoes" style="max-height:280px;overflow-y:auto;border:1px solid var(--line);border-radius:8px">${listaContasHtml('wg', WG_ACCS, '')}</div>
-          </div></div>
+          <div style="padding:16px 20px;max-width:420px" id="wgContaArea">${contaAreaBuscaHtml('wg', WG_ACCS)}</div></div>
         <div id="wgPainelConta"></div>`;
   },
 
@@ -1669,11 +1687,7 @@ const VIEWS = {
           <div style="padding:16px 20px;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
             <div style="min-width:240px;max-width:280px">
               <label style="font-size:12px;color:var(--mut);display:block;margin-bottom:5px">Conta</label>
-              <input type="text" id="relBusca" placeholder="Digite pra filtrar…" autocomplete="off"
-                oninput="buscarContaSugestao('rel', this.value)"
-                style="width:100%;height:38px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:0 12px;font-size:13px;box-sizing:border-box;margin-bottom:8px">
-              <input type="hidden" id="relContaSel">
-              <div id="relSugestoes" style="max-height:200px;overflow-y:auto;border:1px solid var(--line);border-radius:8px">${listaContasHtml('rel', REL_ACCS, '')}</div>
+              <div id="relContaArea">${contaAreaBuscaHtml('rel', REL_ACCS)}</div>
             </div>
             <div><label style="font-size:12px;color:var(--mut);display:block;margin-bottom:5px">De</label>
               <input id="relInicio" type="date" value="${mesPassado}" style="height:38px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:0 12px;font-size:13px;box-sizing:border-box"></div>
