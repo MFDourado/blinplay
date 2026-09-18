@@ -1643,13 +1643,13 @@ const VIEWS = {
       + `<div class="panel"><div class="panel-h"><h3>Gerar relatório</h3></div>
           <div style="padding:16px 20px;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
             <div><label style="font-size:12px;color:var(--mut);display:block;margin-bottom:5px">Conta</label>
-              <select id="relContaSel" style="min-width:220px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:9px 12px;font-size:13px">
+              <select id="relContaSel" style="min-width:220px;height:38px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:0 12px;font-size:13px;font-family:inherit;box-sizing:border-box;-webkit-appearance:none;appearance:none">
                 <option value="">Selecione…</option>${opts}
               </select></div>
             <div><label style="font-size:12px;color:var(--mut);display:block;margin-bottom:5px">De</label>
-              <input id="relInicio" type="date" value="${mesPassado}" style="background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:9px 12px;font-size:13px"></div>
+              <input id="relInicio" type="date" value="${mesPassado}" style="height:38px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:0 12px;font-size:13px;box-sizing:border-box"></div>
             <div><label style="font-size:12px;color:var(--mut);display:block;margin-bottom:5px">Até</label>
-              <input id="relFim" type="date" value="${hoje}" style="background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:9px 12px;font-size:13px"></div>
+              <input id="relFim" type="date" value="${hoje}" style="height:38px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:0 12px;font-size:13px;box-sizing:border-box"></div>
             <button class="solid" onclick="gerarRelatorio()">Gerar</button>
           </div></div>
         <div id="relResultado"></div>`;
@@ -1666,7 +1666,7 @@ const VIEWS = {
 
     const seletorConta = rede
       ? `<div><label style="font-size:12px;color:var(--mut);display:block;margin-bottom:5px">Unidade</label>
-          <select id="relContaSel" style="min-width:220px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:9px 12px;font-size:13px">
+          <select id="relContaSel" style="min-width:220px;height:38px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:0 12px;font-size:13px;font-family:inherit;box-sizing:border-box;-webkit-appearance:none;appearance:none">
             <option value="">Selecione…</option>
             ${CLI_ACCS.map(a=>`<option value="${a.id}">${esc(a.nome)}</option>`).join('')}
           </select></div>`
@@ -1678,9 +1678,9 @@ const VIEWS = {
           <div style="padding:16px 20px;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
             ${seletorConta}
             <div><label style="font-size:12px;color:var(--mut);display:block;margin-bottom:5px">De</label>
-              <input id="relInicio" type="date" value="${mesPassado}" style="background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:9px 12px;font-size:13px"></div>
+              <input id="relInicio" type="date" value="${mesPassado}" style="height:38px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:0 12px;font-size:13px;box-sizing:border-box"></div>
             <div><label style="font-size:12px;color:var(--mut);display:block;margin-bottom:5px">Até</label>
-              <input id="relFim" type="date" value="${hoje}" style="background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:9px 12px;font-size:13px"></div>
+              <input id="relFim" type="date" value="${hoje}" style="height:38px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:0 12px;font-size:13px;box-sizing:border-box"></div>
             <button class="solid" ${botao}>Gerar</button>
           </div></div>
         <div id="relResultado"></div>`;
