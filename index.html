@@ -362,6 +362,7 @@
     <div id="navList"></div>
     <div style="padding:10px 16px 4px;color:#4a4a52;font-size:10.5px;font-family:ui-monospace,monospace">painel <span id="painelVersao">—</span></div>
     <div class="side-foot">
+      <button class="logout" id="btnAtualizar" onclick="atualizarPainel()" style="margin-bottom:6px"><span class="ic">⟳</span> Atualizar</button>
       <button class="logout" onclick="logout()"><span class="ic">↩</span> Sair</button>
     </div>
   </aside>
@@ -718,6 +719,27 @@ async function entrarAposConvite(userId){
    indefensável, e o dia em que uma policy for afrouxada vira brecha real.
    Removido. toggleDemo fica como no-op para não quebrar chamada residual. */
 function toggleDemo(){ /* removido */ }
+// Botão "Atualizar": existe porque deixar o painel aberto por muito tempo
+// numa aba em segundo plano faz o navegador atrasar a renovação automática
+// do token de sessão, e ele expira de verdade nos bastidores. Um F5 nesse
+// estado manda pra tela de login, mesmo a sessão ainda sendo renovável.
+// Aqui, antes de recarregar os dados da tela atual, tentamos renovar a
+// sessão explicitamente (o token de renovação dura muito mais que o de
+// acesso) — só cai pro login se a sessão estiver mesmo perdida de vez.
+async function atualizarPainel(){
+  const btn = document.getElementById('btnAtualizar');
+  if(btn){ btn.disabled = true; btn.style.opacity = '.6'; }
+  try{
+    const { data, error } = await sb.auth.refreshSession();
+    if(error || !data || !data.session){
+      await logout();
+      return;
+    }
+  }catch(e){ /* sem rede momentânea: tenta atualizar os dados mesmo assim */ }
+  try{ await render(); }
+  finally{ if(btn){ btn.disabled = false; btn.style.opacity = '1'; } }
+}
+
 async function logout(){
   try{ if(sb) await sb.auth.signOut(); }catch(e){}
   CLI_ACC=null; CLI_ACCS=[]; PROG_CH=null;
