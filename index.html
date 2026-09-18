@@ -1084,6 +1084,11 @@ function buildNav(){
 /* ---------------- VIEWS ---------------- */
 let RENDER_TOKEN = 0;
 async function render(){
+  // fecha qualquer modal (e o timer dele, tipo o de "Ver tela") que
+  // tenha ficado aberto de uma navegação anterior — sem isso, sair de
+  // "Ver tela" clicando direto num item do menu deixava aquele timer
+  // rodando pra sempre em segundo plano, acumulando lentidão com o uso.
+  fecharModal();
   const view=document.getElementById('view');
   const fn=VIEWS[CUR]||(()=>'<p>—</p>');
   /* M6 — dois cliques rápidos na navegação disputavam: quem terminasse a
