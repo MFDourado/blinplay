@@ -480,6 +480,7 @@ const NAV = {
     {k:'clientes', ic:'◈', label:'Clientes'},
     {k:'prog',     ic:'☰', label:'Programação dos Canais'},
     {k:'camp',     ic:'◷', label:'Campanhas & Agenda'},
+    {k:'widgets',  ic:'🧩', label:'Widgets'},
     {sec:'GESTÃO'},
     {k:'contas',   ic:'⬡', label:'Contas / Hotéis'},
     {k:'usuarios', ic:'◉', label:'Usuários & Acessos'},
@@ -495,6 +496,16 @@ const NAV = {
 };
 let EST_CHS = [], EST_NPL = {}, EST_FILTRO = 'todos';
 let CLI_OV_CHS = [], CLI_OV_FILTRO = null;
+let WG_ACCS = [];
+const WIDGET_DEFS = [
+  {tipo:'hora',       nome:'Hora certa',            desc:'Relógio em tempo real, sem depender de nada externo.'},
+  {tipo:'data',       nome:'Data / dia da semana',  desc:'Data atual por extenso, sem depender de nada externo.'},
+  {tipo:'frase',      nome:'Frase motivacional',    desc:'Frase do dia, de um banco próprio — sem depender de nada externo.'},
+  {tipo:'clima',      nome:'Previsão do tempo',     desc:'Clima da cidade cadastrada abaixo (fonte gratuita e estável).'},
+  {tipo:'cotacao',    nome:'Cotação de moeda',      desc:'Dólar e euro, atualizados automaticamente (fonte gratuita e estável).'},
+  {tipo:'loteria',    nome:'Resultado de loteria',  desc:'Últimos resultados (Mega-Sena e outras), fonte pública.'},
+  {tipo:'brasileirao',nome:'Campeonato Brasileiro', desc:'Tabela e últimos jogos.'},
+];
 
 function cliOverviewTabsHtml(){
   const total = CLI_OV_CHS.length;
@@ -536,6 +547,140 @@ function filtrarCliOverview(v){
   CLI_ACCS.forEach(a=> nomePorConta[a.id]=a.nome);
   if(tabsEl) tabsEl.innerHTML = cliOverviewTabsHtml();
   if(bodyEl) bodyEl.innerHTML = linhasCliOverview(nomePorConta);
+}
+
+/* ---- Widgets: conteúdo pronto por conta ---- */
+async function abrirWidgetsConta(accountId){
+  const painel = document.getElementById('wgPainelConta');
+  if(!accountId){ painel.innerHTML=''; return; }
+  painel.innerHTML = '<div class="panel"><div class="loading">Carregando…</div></div>';
+
+  const [{ data: existentes }, { data: chs }] = await Promise.all([
+    sb.from('account_widgets').select('id,tipo,ativo,duracao_seg,a_cada,config').eq('account_id', accountId),
+    sb.from('channels').select('id,nome').eq('account_id', accountId).eq('ativo', true).order('nome'),
+  ]);
+  const porTipo = {};
+  (existentes||[]).forEach(w=> porTipo[w.tipo]=w);
+
+  let canaisPorWidget = {};
+  if(existentes && existentes.length){
+    const ids = existentes.map(w=>w.id);
+    const { data: links } = await sb.from('account_widget_channels').select('widget_id,channel_id').in('widget_id', ids);
+    (links||[]).forEach(l=> (canaisPorWidget[l.widget_id] ||= []).push(l.channel_id));
+  }
+
+  painel.innerHTML = `<div class="panel"><div class="panel-h"><h3>Widgets</h3><span class="hint">${(chs||[]).length} canal(is) nesta conta</span></div>
+    <div style="padding:8px 20px 20px;display:flex;flex-direction:column;gap:14px">
+      ${WIDGET_DEFS.map(def => cardWidgetHtml(def, accountId, porTipo[def.tipo], chs||[], porTipo[def.tipo]?canaisPorWidget[porTipo[def.tipo].id]:[])).join('')}
+    </div></div>`;
+}
+
+function cardWidgetHtml(def, accountId, existente, canais, canaisSelecionados){
+  const ativo = existente ? existente.ativo : false;
+  const dur = existente ? existente.duracao_seg : 8;
+  const cada = existente ? existente.a_cada : 5;
+  const cfg = existente ? (existente.config||{}) : {};
+  const selecionados = new Set(canaisSelecionados||[]);
+
+  const camposExtra = def.tipo==='clima' ? `
+    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+      <input id="wg_clima_cidade" placeholder="Cidade" value="${escA(cfg.cidade||'')}"
+        style="flex:1;min-width:140px;background:#0c0c10;border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px 10px;font-size:12.5px">
+      <input id="wg_clima_uf" placeholder="UF" maxlength="2" value="${escA(cfg.uf||'')}"
+        style="width:60px;background:#0c0c10;border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px 10px;font-size:12.5px;text-transform:uppercase">
+      <button class="mini" type="button" onclick='buscarCidadeCNPJ("${accountId}")'>📍 Buscar pelo CNPJ</button>
+    </div>
+    <div id="wg_clima_msg" style="font-size:11.5px;color:var(--mut);margin-top:4px"></div>` : '';
+
+  const avisoRisco = def.tipo==='brasileirao'
+    ? `<div style="font-size:11px;color:var(--gold);margin-top:4px">⚠ Fonte não-oficial — se sair do ar, esse item some da rotação sozinho, sem travar a programação.</div>`
+    : '';
+
+  const canaisHtml = canais.length ? canais.map(c=>
+      `<label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--mut);margin:3px 10px 3px 0">
+        <input type="checkbox" name="wg_${def.tipo}_canal" value="${c.id}" ${selecionados.has(c.id)?'checked':''}> ${esc(c.nome)}
+      </label>`).join('')
+    : '<span style="font-size:12px;color:var(--mut)">Sem canais cadastrados nesta conta</span>';
+
+  return `<div style="border:1px solid var(--line);border-radius:12px;padding:16px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+      <div>
+        <label style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px">
+          <input type="checkbox" id="wg_${def.tipo}_ativo" ${ativo?'checked':''}> ${def.nome}
+        </label>
+        <div style="font-size:12px;color:var(--mut);margin-top:2px">${def.desc}</div>
+        ${avisoRisco}
+      </div>
+      <button class="mini" type="button" onclick='salvarWidget("${accountId}","${def.tipo}")'>Salvar</button>
+    </div>
+    <div style="display:flex;gap:16px;margin-top:10px;flex-wrap:wrap">
+      <label style="font-size:12px;color:var(--mut)">Segundos na tela
+        <input id="wg_${def.tipo}_dur" type="number" min="3" max="60" value="${dur}"
+          style="display:block;width:80px;margin-top:4px;background:#0c0c10;border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:6px 8px;font-size:12.5px"></label>
+      <label style="font-size:12px;color:var(--mut)">Aparece a cada quantos itens
+        <input id="wg_${def.tipo}_cada" type="number" min="1" max="50" value="${cada}"
+          style="display:block;width:80px;margin-top:4px;background:#0c0c10;border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:6px 8px;font-size:12.5px"></label>
+    </div>
+    ${camposExtra}
+    <div style="margin-top:10px">
+      <div style="font-size:11.5px;color:var(--mut);margin-bottom:5px">Rodar nos canais (nenhum marcado = todos):</div>
+      ${canaisHtml}
+    </div>
+    <div id="wg_${def.tipo}_msg" class="fmsg" style="margin-top:6px"></div>
+  </div>`;
+}
+
+async function buscarCidadeCNPJ(accountId){
+  const el = document.getElementById('wg_clima_msg');
+  const conta = WG_ACCS.find(a=>a.id===accountId);
+  const soNum = String(conta && conta.cnpj || '').replace(/\D/g,'');
+  if(soNum.length !== 14){ el.textContent = 'CNPJ da conta inválido/ausente — preencha manualmente.'; return; }
+  el.textContent = 'Consultando…';
+  try{
+    const r = await fetch('https://brasilapi.com.br/api/cnpj/v1/'+soNum);
+    if(!r.ok) throw new Error('não encontrado');
+    const j = await r.json();
+    document.getElementById('wg_clima_cidade').value = j.municipio || '';
+    document.getElementById('wg_clima_uf').value = j.uf || '';
+    el.textContent = j.municipio ? ('Preenchido: '+j.municipio+'/'+(j.uf||'')) : 'Não veio cidade — preencha manualmente.';
+  }catch(e){ el.textContent = 'Não encontrado na Receita — preencha manualmente.'; }
+}
+
+async function salvarWidget(accountId, tipo){
+  const ativo = document.getElementById('wg_'+tipo+'_ativo').checked;
+  const dur = parseInt(document.getElementById('wg_'+tipo+'_dur').value, 10) || 8;
+  const cada = parseInt(document.getElementById('wg_'+tipo+'_cada').value, 10) || 5;
+  const msg = document.getElementById('wg_'+tipo+'_msg');
+  msg.className = 'fmsg'; msg.textContent = 'Salvando…';
+
+  let config = {};
+  if(tipo==='clima'){
+    config = {
+      cidade: (document.getElementById('wg_clima_cidade').value||'').trim(),
+      uf: (document.getElementById('wg_clima_uf').value||'').trim(),
+    };
+  }
+
+  const canaisEl = document.querySelectorAll('input[name="wg_'+tipo+'_canal"]:checked');
+  const canaisSel = Array.from(canaisEl).map(el=>el.value);
+
+  try{
+    const { data: up, error } = await sb.from('account_widgets')
+      .upsert({ account_id:accountId, tipo, ativo, duracao_seg:dur, a_cada:cada, config }, { onConflict:'account_id,tipo' })
+      .select('id').single();
+    if(error) throw error;
+    const widgetId = up.id;
+
+    await sb.from('account_widget_channels').delete().eq('widget_id', widgetId);
+    if(canaisSel.length){
+      const { error: e2 } = await sb.from('account_widget_channels')
+        .insert(canaisSel.map(cid=>({ widget_id:widgetId, channel_id:cid })));
+      if(e2) throw e2;
+    }
+    msg.className = 'fmsg ok'; msg.textContent = 'Salvo!';
+  }catch(e){
+    msg.className = 'fmsg err'; msg.textContent = 'Erro: '+((e&&e.message)||e);
+  }
 }
 let ROLE='admin', CUR='overview';
 
@@ -1341,6 +1486,23 @@ const VIEWS = {
         <div class="est-tabs" id="cliOvTabs">${cliOverviewTabsHtml()}</div>
         <table><thead><tr><th>Unidade / Canal</th><th>Status</th><th>Último acesso</th><th>Versão</th></tr></thead>
           <tbody id="cliOvBody">${linhasCliOverview(nomePorConta)}</tbody></table></div>`;
+  },
+
+  // ADMIN — configuração de widgets (conteúdo pronto: clima, hora, loteria...)
+  // por conta. Não toca em nenhuma tabela/tela existente — é aba nova.
+  async widgets(){
+    const { data: accs } = await sb.from('accounts').select('id,nome,cnpj').eq('ativo',true).order('nome');
+    WG_ACCS = accs || [];
+    const opts = WG_ACCS.map(a=>`<option value="${a.id}">${esc(a.nome)}</option>`).join('');
+    return topbar('Widgets','Conteúdo pronto (clima, hora certa, loteria...) pra completar a programação dos seus clientes','')
+      + `<div class="panel"><div class="panel-h"><h3>Escolha a conta</h3></div>
+          <div style="padding:16px 20px">
+            <select id="wgContaSel" onchange="abrirWidgetsConta(this.value)"
+              style="width:100%;max-width:420px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:10px 12px;font-size:13px">
+              <option value="">Selecione um hotel…</option>${opts}
+            </select>
+          </div></div>
+        <div id="wgPainelConta"></div>`;
   },
 };
 
