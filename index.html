@@ -725,19 +725,11 @@ async function gerarRelatorio(accountIdFixo){
     // sempre reabre com tudo visível — decisão de ocultar não fica "presa"
     // de um relatório anterior sem a pessoa perceber
     REL_COLS_VISIVEIS = { cnpj:true, mac:true, ultimo_ip:true, player_version:true, last_seen_at:true };
-    REL_VISAO = 'dashboard'; // todo relatório novo abre no dashboard, não na tabela
 
     area.innerHTML = montarPainelRelatorio();
   }catch(e){
     area.innerHTML = `<div class="panel"><div class="empty"><b>Erro ao gerar relatório</b>${esc((e&&e.message)||String(e))}</div></div>`;
   }
-}
-
-let REL_VISAO = 'dashboard'; // 'tabela' | 'dashboard' — dashboard é o padrão ao gerar
-function alternarVisaoRelatorio(modo){
-  REL_VISAO = modo;
-  const area = document.getElementById('relResultado');
-  if(area) area.innerHTML = montarPainelRelatorio();
 }
 
 // gráfico de colunas EMPILHADAS (vertical), em SVG puro — cada canal é uma
@@ -904,18 +896,6 @@ function montarPainelRelatorio(){
 
   const cnpjLinha = (REL_COLS_VISIVEIS.cnpj && contaCnpj) ? `<div style="color:var(--mut);font-size:12.5px;margin-top:2px">CNPJ: ${esc(contaCnpj)}</div>` : '';
 
-  const tabBtn = (modo, label)=>
-    `<button type="button" onclick="alternarVisaoRelatorio('${modo}')"
-       style="padding:7px 14px;border-radius:999px;font-size:12.5px;font-weight:600;border:1px solid ${REL_VISAO===modo?'rgba(245,168,0,.4)':'var(--line)'};
-       background:${REL_VISAO===modo?'var(--gold-soft)':'var(--surf2)'};color:${REL_VISAO===modo?'var(--gold)':'var(--mut)'}">${label}</button>`;
-
-  const corpoTabela = `<div style="padding:0 20px 16px">
-      <div style="font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Mostrar no relatório (tela, CSV e PDF)</div>
-      ${checkboxesHtml}
-    </div>
-    <table><thead><tr><th>Canal</th>${colunasAtivas.map(c=>`<th>${c.label}</th>`).join('')}<th>Dias online</th><th>Dias offline</th><th>Dias no período</th></tr></thead>
-      <tbody>${linhasCanais}</tbody></table>`;
-
   return `<div class="panel"><div class="panel-h"><div><h3>${esc(contaNome||'')}</h3>${cnpjLinha}</div><span class="hint">${esc(inicio)} a ${esc(fim)}</span></div>
     <div style="padding:16px 20px;display:flex;gap:24px;flex-wrap:wrap">
       <div class="kpi"><div class="lab">Imagens ativas no momento</div><div class="val">${img.total_agora}</div></div>
@@ -923,10 +903,13 @@ function montarPainelRelatorio(){
       <div class="kpi"><div class="lab">Imagens inseridas no período</div><div class="val">${img.total_periodo}</div></div>
       <div class="kpi"><div class="lab">Vídeos inseridos no período</div><div class="val">${vid.total_periodo}</div></div>
     </div>
-    <div style="padding:0 20px 6px;display:flex;gap:8px">
-      ${tabBtn('tabela','☰ Tabela')}${tabBtn('dashboard','▥ Dashboard')}
+    ${montarDashboardRelatorio()}
+    <div style="padding:0 20px 16px">
+      <div style="font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Mostrar na tabela (tela e exportações)</div>
+      ${checkboxesHtml}
     </div>
-    ${REL_VISAO==='dashboard' ? montarDashboardRelatorio() : corpoTabela}
+    <table><thead><tr><th>Canal</th>${colunasAtivas.map(c=>`<th>${c.label}</th>`).join('')}<th>Dias online</th><th>Dias offline</th><th>Dias no período</th></tr></thead>
+      <tbody>${linhasCanais}</tbody></table>
     <div style="padding:16px 20px;display:flex;gap:8px">
       <button class="ghost" onclick="exportarRelatorioCSV()">⬇ Exportar CSV</button>
       <button class="ghost" onclick="exportarRelatorioPDF()">⬇ Exportar PDF (com gráficos)</button>
