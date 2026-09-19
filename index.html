@@ -929,16 +929,14 @@ function alternarColunaRelatorio(chave, valor){
   if(area) area.innerHTML = montarPainelRelatorio();
 }
 
-async function salvarVersaoAtual(){
-  const v = (document.getElementById('versaoAtualInput').value||'').trim();
-  const msg = document.getElementById('versaoAtualMsg');
-  if(!v){ msg.className='fmsg err'; msg.textContent='Preencha a versão.'; return; }
-  msg.className='fmsg'; msg.textContent='Salvando…';
+async function pedirRefreshMassa(){
+  if(!confirm('Isso manda AGORA o pedido de recarregamento pra TODOS os boxes ativos, de uma vez.\n\nContinuar?')) return;
+  const msg = document.getElementById('refreshMassaMsg');
+  msg.className='fmsg'; msg.textContent='Enviando…';
   try{
-    const { error } = await sb.from('app_config')
-      .upsert({ chave:'player_versao_atual', valor:v }, { onConflict:'chave' });
+    const { data, error } = await sb.rpc('pedir_refresh_massa');
     if(error) throw error;
-    msg.className='fmsg ok'; msg.textContent='Salvo! Os boxes vão atualizar sozinhos na próxima sincronização.';
+    msg.className='fmsg ok'; msg.textContent='Pedido enviado pra '+data+' box(es).';
   }catch(e){ msg.className='fmsg err'; msg.textContent='Erro: '+((e&&e.message)||e); }
 }
 
@@ -1584,12 +1582,11 @@ const VIEWS = {
     + campHtml;
   },
   async estacoes(){
-    const [{ data: chs, error }, { data: pl }, { data: cfg }] = await Promise.all([
+    const [{ data: chs, error }, { data: pl }] = await Promise.all([
       sb.from('channels')
         .select('id,nome,descricao,device_token,codigo_curto,ativo,last_seen_at,player_version,account_id,accounts(nome,cnpj)')
         .order('created_at',{ascending:true}),
       sb.from('playlist_items').select('channel_id'),
-      sb.from('app_config').select('valor').eq('chave','player_versao_atual').maybeSingle(),
     ]);
     if(error) throw error;
     // quantos itens de programação cada canal tem: é o que decide se
@@ -1598,18 +1595,17 @@ const VIEWS = {
     (pl||[]).forEach(i=> nPl[i.channel_id] = (nPl[i.channel_id]||0) + 1);
     EST_CHS = chs || [];
     EST_NPL = nPl;
-    const versaoAtual = (cfg && cfg.valor) || '';
     return topbar('Estações & Canais','1 box = 1 canal. Use o código de 6 dígitos no app BlinPlay do box.', `<button class="solid" onclick="novaEstacao()">＋ Nova estação</button>`)
     +`<div class="panel"><div class="panel-h"><h3>Atualização automática dos boxes</h3></div>
-        <div style="padding:16px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-          <div style="font-size:12.5px;color:var(--mut)">Versão mais recente do player publicada no GitHub Pages:</div>
-          <input id="versaoAtualInput" type="text" value="${escA(versaoAtual)}" placeholder="ex: v5.1"
-            style="width:120px;background:#0c0c10;border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:7px 10px;font-size:13px">
-          <button class="mini" onclick="salvarVersaoAtual()">Salvar</button>
-          <span id="versaoAtualMsg" class="fmsg"></span>
+        <div style="padding:16px 20px;font-size:12.5px;color:var(--mut)">
+          Nada pra preencher aqui: assim que QUALQUER box reportar uma versão nova (basta 1 estar rodando o player mais recente), os outros com versão mais antiga recarregam sozinhos na próxima sincronização.
+        </div>
+        <div style="padding:0 20px 20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:16px">
+          <button class="ghost" onclick="pedirRefreshMassa()">⚡ Forçar recarregamento AGORA em todos os boxes</button>
+          <span id="refreshMassaMsg" class="fmsg"></span>
         </div>
         <div style="padding:0 20px 16px;font-size:11.5px;color:var(--mut)">
-          Assim que salvar aqui, todo box com versão diferente recarrega sozinho na próxima sincronização — sem precisar clicar em "Atualizar tela" um por um.
+          Não espera a próxima sincronização — manda o pedido pra todos de uma vez, ativos hoje. Use pra urgência; no dia a dia, o mecanismo acima já resolve sozinho.
         </div></div>`
     +`<div class="panel"><div class="panel-h"><h3>Estações</h3><span class="hint">online = visto nos últimos 5 min</span></div>
       <div class="est-tabs" id="estTabs">${estTabsHtml()}</div>
