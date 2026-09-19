@@ -707,22 +707,25 @@ async function gerarRelatorio(accountIdFixo){
   area.innerHTML = '<div class="panel"><div class="loading">Gerando…</div></div>';
 
   try{
-    const [{ data: canais, error: e1 }, { data: midias, error: e2 }, { data: conta, error: e3 }] = await Promise.all([
+    const [{ data: canais, error: e1 }, { data: midias, error: e2 }, { data: conta, error: e3 }, { data: mensal, error: e4 }] = await Promise.all([
       sb.rpc('relatorio_canais', { p_account_id: accountId, p_inicio: inicio, p_fim: fim }),
       sb.rpc('relatorio_midias', { p_account_id: accountId, p_inicio: inicio, p_fim: fim }),
       sb.from('accounts').select('nome,cnpj').eq('id', accountId).single(),
+      sb.rpc('relatorio_mensal', { p_account_id: accountId, p_inicio: inicio, p_fim: fim }),
     ]);
     if(e1) throw e1;
     if(e2) throw e2;
     if(e3) throw e3;
+    if(e4) throw e4;
 
     REL_ULTIMO = {
-      accountId, inicio, fim, canais: canais||[], midias: midias||[],
+      accountId, inicio, fim, canais: canais||[], midias: midias||[], mensal: mensal||[],
       contaNome: (conta&&conta.nome)||'', contaCnpj: (conta&&conta.cnpj)||'',
     };
     // sempre reabre com tudo visível — decisão de ocultar não fica "presa"
     // de um relatório anterior sem a pessoa perceber
     REL_COLS_VISIVEIS = { cnpj:true, mac:true, ultimo_ip:true, player_version:true, last_seen_at:true };
+    REL_VISAO = 'dashboard'; // todo relatório novo abre no dashboard, não na tabela
 
     area.innerHTML = montarPainelRelatorio();
   }catch(e){
@@ -730,31 +733,49 @@ async function gerarRelatorio(accountIdFixo){
   }
 }
 
-let REL_VISAO = 'tabela'; // 'tabela' | 'dashboard'
+let REL_VISAO = 'dashboard'; // 'tabela' | 'dashboard' — dashboard é o padrão ao gerar
 function alternarVisaoRelatorio(modo){
   REL_VISAO = modo;
   const area = document.getElementById('relResultado');
   if(area) area.innerHTML = montarPainelRelatorio();
 }
 
-// gráfico de barras em SVG puro — sem biblioteca nenhuma, por isso
-// funciona idêntico na tela e no PDF exportado (que é so o navegador
-// imprimindo o HTML)
-function graficoBarrasSvg(dados, larguraTotal, corTexto, corRotulo){
-  larguraTotal = larguraTotal || 520;
-  corTexto = corTexto || '#222';       // valor da barra — dark por padrão (PDF, fundo branco)
-  corRotulo = corRotulo || '#8a8d96';  // rótulo à esquerda — sempre neutro, lê bem nos dois fundos
-  const alturaBarra = 26, gap = 12, rotuloW = 150;
-  const larguraBarraMax = larguraTotal - rotuloW - 50;
-  const maxValor = Math.max(1, ...dados.map(d=>d.valor));
-  const alturaSvg = dados.length * (alturaBarra+gap) + gap;
-  let svg = `<svg viewBox="0 0 ${larguraTotal} ${alturaSvg}" width="100%" style="max-width:${larguraTotal}px;height:auto;display:block">`;
-  dados.forEach((d,i)=>{
-    const y = gap + i*(alturaBarra+gap);
-    const w = Math.max(2, (d.valor/maxValor) * larguraBarraMax);
-    svg += `<text x="0" y="${y+alturaBarra*0.68}" font-size="12.5" font-family="Arial,sans-serif" fill="${corRotulo}">${esc(d.label)}</text>`;
-    svg += `<rect x="${rotuloW}" y="${y}" width="${w}" height="${alturaBarra}" rx="5" fill="${d.cor}"></rect>`;
-    svg += `<text x="${rotuloW+w+8}" y="${y+alturaBarra*0.68}" font-size="13" font-family="Arial,sans-serif" font-weight="700" fill="${corTexto}">${d.valor}</text>`;
+// gráfico de colunas EMPILHADAS (vertical), em SVG puro — cada canal é uma
+// coluna, cada "parte" empilha dentro dela (ex: online embaixo, offline em
+// cima). Mesma técnica em toda parte: funciona igual na tela e no PDF.
+// gráfico de colunas AGRUPADAS (lado a lado), com o número em cima de
+// cada barra — usado pro "dias online x offline por mês"
+function graficoColunasAgrupadasSvg(grupos, larguraTotal, alturaTotal, corRotulo, corValor, corEixo){
+  larguraTotal = larguraTotal || 520; alturaTotal = alturaTotal || 220;
+  corRotulo = corRotulo || '#a8abb4'; corValor = corValor || '#fff';
+  corEixo = corEixo || 'rgba(255,255,255,.08)';
+  const margemBaixo = 26, margemTopo = 22;
+  const alturaUtil = alturaTotal - margemBaixo - margemTopo;
+  const maxValor = Math.max(1, ...grupos.flatMap(g=>g.valores.map(v=>v.valor)));
+  const n = grupos.length || 1;
+  const larguraGrupo = larguraTotal / n;
+  const larguraBarra = Math.min(24, larguraGrupo * 0.28);
+  const gapBarras = 4;
+
+  let svg = `<svg viewBox="0 0 ${larguraTotal} ${alturaTotal}" width="100%" style="max-width:${larguraTotal}px;height:auto;display:block">`;
+  for(let g=1; g<=3; g++){
+    const gy = margemTopo + alturaUtil - (alturaUtil*g/3);
+    svg += `<line x1="0" y1="${gy}" x2="${larguraTotal}" y2="${gy}" stroke="${corEixo}" stroke-width="1"></line>`;
+  }
+  grupos.forEach((grupo,i)=>{
+    const centro = larguraGrupo*i + larguraGrupo/2;
+    const larguraJunto = larguraBarra*grupo.valores.length + gapBarras*(grupo.valores.length-1);
+    let x = centro - larguraJunto/2;
+    grupo.valores.forEach(v=>{
+      const h = (v.valor/maxValor) * alturaUtil;
+      const y = margemTopo + alturaUtil - h;
+      if(h>0){
+        svg += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${larguraBarra}" height="${h.toFixed(1)}" rx="3" fill="${v.cor}"></rect>`;
+        svg += `<text x="${(x+larguraBarra/2).toFixed(1)}" y="${(y-5).toFixed(1)}" text-anchor="middle" font-size="10.5" font-weight="700" font-family="Arial,sans-serif" fill="${corValor}">${v.valor}</text>`;
+      }
+      x += larguraBarra + gapBarras;
+    });
+    svg += `<text x="${centro.toFixed(1)}" y="${alturaTotal-6}" text-anchor="middle" font-size="10.5" font-family="Arial,sans-serif" fill="${corRotulo}">${esc(grupo.label)}</text>`;
   });
   svg += `</svg>`;
   return svg;
@@ -784,48 +805,72 @@ function graficoDonutSvg(dados, tamanho, corTextoCentro, corRotuloLegenda){
   } else {
     arcos = `<circle cx="${centro}" cy="${centro}" r="${raio}" fill="none" stroke="#3a3a42" stroke-width="24"></circle>`;
   }
-  return `<div style="display:flex;align-items:center;gap:22px;flex-wrap:wrap">
-    <svg viewBox="0 0 ${tamanho} ${tamanho}" width="${tamanho}" height="${tamanho}">
+  return `<svg viewBox="0 0 ${tamanho} ${tamanho}" width="${tamanho}" height="${tamanho}">
       ${arcos}
       <text x="${centro}" y="${centro-2}" text-anchor="middle" font-size="26" font-weight="800" font-family="Arial,sans-serif" fill="${corTextoCentro}">${total}</text>
       <text x="${centro}" y="${centro+17}" text-anchor="middle" font-size="10.5" font-family="Arial,sans-serif" fill="${corRotuloLegenda}">total</text>
-    </svg>
-    <div style="display:flex;flex-direction:column;gap:8px">
-      ${dados.map(d=>`<span style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:${corRotuloLegenda}">
-        <span style="width:11px;height:11px;border-radius:3px;background:${d.cor};display:inline-block;flex-shrink:0"></span>${esc(d.label)} — <b style="color:${corTextoCentro}">${d.valor}</b>
-      </span>`).join('')}
-    </div>
+    </svg>`;
+}
+
+// "Jul 26", "Ago 26"... — lista fixa em vez de Intl/toLocaleDateString,
+// porque o formato automático de data pt-BR varia por navegador (em teste,
+// um deles devolveu "Jul de 26" em vez de "Jul 26")
+function labelMes(dataStr){
+  const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const d = new Date(dataStr+'T00:00:00');
+  return MESES[d.getMonth()]+' '+String(d.getFullYear()).slice(-2);
+}
+
+function legendaGrafico(dados, corTexto, corValor, semNumero){
+  return `<div style="display:flex;flex-direction:column;gap:8px">
+    ${dados.map(d=>`<span style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:${corTexto}">
+      <span style="width:11px;height:11px;border-radius:3px;background:${d.cor};display:inline-block;flex-shrink:0"></span>${esc(d.label)}${semNumero?'':` — <b style="color:${corValor}">${d.valor}</b>`}
+    </span>`).join('')}
+  </div>`;
+}
+
+// painel mini (cartão) reaproveitado dentro do dashboard — mesmo visual da
+// classe .panel, só que aninhado, então usa estilo inline pra não colidir
+function cartaoDashboard(titulo, conteudo){
+  return `<div style="flex:1;min-width:280px;border:1px solid var(--line);border-radius:var(--r);padding:18px;background:linear-gradient(180deg,var(--surf),var(--bg2))">
+    <div style="font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px">${titulo}</div>
+    ${conteudo}
   </div>`;
 }
 
 function montarDashboardRelatorio(){
-  const { canais, midias } = REL_ULTIMO;
+  const { midias, mensal } = REL_ULTIMO;
   const img = (midias||[]).find(m=>m.tipo==='image') || {total_agora:0};
   const vid = (midias||[]).find(m=>m.tipo==='video')  || {total_agora:0};
 
-  const donutMidias = graficoDonutSvg([
+  const dadosMidias = [
     { label:'Imagens', valor: img.total_agora, cor:'#F5C518' },
     { label:'Vídeos',  valor: vid.total_agora, cor:'#5aa9ff' },
-  ], 190, '#fff', '#a8abb4');
+  ];
+  const cartaoMidias = cartaoDashboard('Mídias por tipo',
+    `<div style="display:flex;align-items:center;gap:22px;flex-wrap:wrap">
+      ${graficoDonutSvg(dadosMidias, 170, '#fff', '#a8abb4')}
+      ${legendaGrafico(dadosMidias, '#a8abb4', '#fff')}
+    </div>`);
 
-  const dadosDias = [];
-  (canais||[]).forEach(c=>{
-    dadosDias.push({ label: c.canal+' online', valor: c.dias_online, cor:'#34d399' });
-    dadosDias.push({ label: c.canal+' offline', valor: c.dias_total-c.dias_online, cor:'#f4606b' });
-  });
-  // tela = fundo escuro -> número da barra em branco; rótulo continua neutro
-  const graficoDias = dadosDias.length ? graficoBarrasSvg(dadosDias, 560, '#fff', '#a8abb4')
-    : '<div class="empty"><b>Sem dados nesse período</b></div>';
+  const gruposMensal = (mensal||[]).map(m=> ({
+    label: labelMes(m.mes_ord),
+    valores: [
+      { valor: m.dias_online, cor:'#34d399' },
+      { valor: m.dias_offline, cor:'#f4606b' },
+    ],
+  }));
+  const cartaoDias = cartaoDashboard('Dias online × offline por mês',
+    gruposMensal.length
+      ? `<div style="display:flex;gap:20px;align-items:flex-end;flex-wrap:wrap">
+          ${graficoColunasAgrupadasSvg(gruposMensal, 380, 210, '#a8abb4', '#fff')}
+          ${legendaGrafico([{label:'Online',cor:'#34d399'},{label:'Offline',cor:'#f4606b'}], '#a8abb4', '#fff', true)}
+        </div>`
+      : '<div class="empty"><b>Sem dados nesse período</b></div>');
 
-  return `<div style="padding:8px 20px 20px;display:flex;flex-direction:column;gap:26px">
-    <div>
-      <div style="font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Mídias ativas no momento</div>
-      ${donutMidias}
-    </div>
-    <div>
-      <div style="font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Dias online × offline por canal</div>
-      ${graficoDias}
-    </div>
+  return `<div style="padding:8px 20px 20px;display:flex;gap:18px;flex-wrap:wrap">
+    ${cartaoMidias}
+    ${cartaoDias}
   </div>`;
 }
 
@@ -938,7 +983,7 @@ function exportarRelatorioCSV(){
 
 function exportarRelatorioPDF(){
   if(!REL_ULTIMO){ alert('Gere o relatório primeiro.'); return; }
-  const { inicio, fim, canais, midias, contaNome, contaCnpj } = REL_ULTIMO;
+  const { inicio, fim, canais, midias, mensal, contaNome, contaCnpj } = REL_ULTIMO;
   const img = midias.find(m=>m.tipo==='image') || {total_agora:0, total_periodo:0};
   const vid = midias.find(m=>m.tipo==='video')  || {total_agora:0, total_periodo:0};
   const colunasAtivas = REL_COLUNAS_OPCIONAIS.filter(c=>REL_COLS_VISIVEIS[c.key]);
@@ -959,12 +1004,14 @@ function exportarRelatorioPDF(){
     { label:'Imagens', valor: img.total_agora, cor:'#F5C518' },
     { label:'Vídeos',  valor: vid.total_agora, cor:'#5aa9ff' },
   ], 170, '#222', '#555');
-  const dadosDiasPdf = [];
-  canais.forEach(c=>{
-    dadosDiasPdf.push({ label: c.canal+' online', valor: c.dias_online, cor:'#34d399' });
-    dadosDiasPdf.push({ label: c.canal+' offline', valor: c.dias_total-c.dias_online, cor:'#f4606b' });
-  });
-  const graficoDiasPdf = dadosDiasPdf.length ? graficoBarrasSvg(dadosDiasPdf, 520) : '';
+  const gruposMensalPdf = (mensal||[]).map(m=> ({
+    label: labelMes(m.mes_ord),
+    valores: [
+      { valor: m.dias_online, cor:'#34d399' },
+      { valor: m.dias_offline, cor:'#f4606b' },
+    ],
+  }));
+  const graficoDiasPdf = gruposMensalPdf.length ? graficoColunasAgrupadasSvg(gruposMensalPdf, 480, 220, '#555', '#222', '#e5e5e5') : '';
 
   // PDF via impressão do navegador: zero biblioteca nova, funciona em
   // qualquer computador — a pessoa escolhe "Salvar como PDF" na impressora.
@@ -991,7 +1038,7 @@ function exportarRelatorioPDF(){
     </div>
     <h2>Mídias ativas no momento</h2>
     ${graficoMidiasPdf}
-    <h2>Dias online × offline por canal</h2>
+    <h2>Dias online × offline por mês</h2>
     ${graficoDiasPdf}
     <h2>Detalhamento por canal</h2>
     <table><thead><tr><th>Canal</th>${colunasAtivas.map(c=>`<th>${c.label}</th>`).join('')}<th>Dias online</th><th>Dias offline</th><th>Dias no período</th></tr></thead>
