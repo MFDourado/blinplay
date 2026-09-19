@@ -741,7 +741,7 @@ function graficoColunasAgrupadasSvg(grupos, larguraTotal, alturaTotal, corRotulo
   larguraTotal = larguraTotal || 520; alturaTotal = alturaTotal || 220;
   corRotulo = corRotulo || '#a8abb4'; corValor = corValor || '#fff';
   corEixo = corEixo || 'rgba(255,255,255,.08)';
-  const margemBaixo = 26, margemTopo = 22;
+  const margemBaixo = 40, margemTopo = 22;
   const alturaUtil = alturaTotal - margemBaixo - margemTopo;
   const maxValor = Math.max(1, ...grupos.flatMap(g=>g.valores.map(v=>v.valor)));
   const n = grupos.length || 1;
@@ -767,7 +767,9 @@ function graficoColunasAgrupadasSvg(grupos, larguraTotal, alturaTotal, corRotulo
       }
       x += larguraBarra + gapBarras;
     });
-    svg += `<text x="${centro.toFixed(1)}" y="${alturaTotal-6}" text-anchor="middle" font-size="10.5" font-family="Arial,sans-serif" fill="${corRotulo}">${esc(grupo.label)}</text>`;
+    const totalGrupo = grupo.valores.reduce((s,v)=>s+v.valor,0);
+    svg += `<text x="${centro.toFixed(1)}" y="${alturaTotal-20}" text-anchor="middle" font-size="10.5" font-family="Arial,sans-serif" fill="${corRotulo}">${esc(grupo.label)}</text>`;
+    svg += `<text x="${centro.toFixed(1)}" y="${alturaTotal-6}" text-anchor="middle" font-size="10.5" font-family="Arial,sans-serif" fill="${corRotulo}">Total: ${totalGrupo}</text>`;
   });
   svg += `</svg>`;
   return svg;
