@@ -642,12 +642,12 @@ function cardWidgetHtml(def, accountId, existente, canais, canaisSelecionados){
         style="flex:1;min-width:140px;background:#0c0c10;border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px 10px;font-size:12.5px">
       <input id="wg_clima_uf" placeholder="UF" maxlength="2" value="${escA(cfg.uf||'')}"
         style="width:60px;background:#0c0c10;border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px 10px;font-size:12.5px;text-transform:uppercase">
-      <button class="mini" type="button" onclick='buscarCidadeCNPJ("${accountId}")'>📍 Buscar pelo CNPJ</button>
+      <button class="mini" type="button" onclick='buscarCidadeCNPJ("${accountId}")'>Buscar pelo CNPJ</button>
     </div>
     <div id="wg_clima_msg" style="font-size:11.5px;color:var(--mut);margin-top:4px"></div>` : '';
 
   const avisoRisco = def.tipo==='brasileirao'
-    ? `<div style="font-size:11px;color:var(--gold);margin-top:4px">⚠ Fonte não-oficial — se sair do ar, esse item some da rotação sozinho, sem travar a programação.</div>`
+    ? `<div style="font-size:11px;color:var(--gold);margin-top:4px">Fonte não-oficial — se sair do ar, esse item some da rotação sozinho, sem travar a programação.</div>`
     : '';
 
   const canaisHtml = canais.length ? canais.map(c=>
@@ -730,6 +730,64 @@ async function gerarRelatorio(accountIdFixo){
   }
 }
 
+let REL_VISAO = 'tabela'; // 'tabela' | 'dashboard'
+function alternarVisaoRelatorio(modo){
+  REL_VISAO = modo;
+  const area = document.getElementById('relResultado');
+  if(area) area.innerHTML = montarPainelRelatorio();
+}
+
+// gráfico de barras em SVG puro — sem biblioteca nenhuma, por isso
+// funciona idêntico na tela e no PDF exportado (que é so o navegador
+// imprimindo o HTML)
+function graficoBarrasSvg(dados, larguraTotal){
+  larguraTotal = larguraTotal || 520;
+  const alturaBarra = 26, gap = 12, rotuloW = 150;
+  const larguraBarraMax = larguraTotal - rotuloW - 50;
+  const maxValor = Math.max(1, ...dados.map(d=>d.valor));
+  const alturaSvg = dados.length * (alturaBarra+gap) + gap;
+  let svg = `<svg viewBox="0 0 ${larguraTotal} ${alturaSvg}" width="100%" style="max-width:${larguraTotal}px;height:auto;display:block">`;
+  dados.forEach((d,i)=>{
+    const y = gap + i*(alturaBarra+gap);
+    const w = Math.max(2, (d.valor/maxValor) * larguraBarraMax);
+    svg += `<text x="0" y="${y+alturaBarra*0.68}" font-size="12.5" font-family="Arial,sans-serif" fill="#8a8d96">${esc(d.label)}</text>`;
+    svg += `<rect x="${rotuloW}" y="${y}" width="${w}" height="${alturaBarra}" rx="5" fill="${d.cor}"></rect>`;
+    svg += `<text x="${rotuloW+w+8}" y="${y+alturaBarra*0.68}" font-size="13" font-family="Arial,sans-serif" font-weight="700" fill="#222">${d.valor}</text>`;
+  });
+  svg += `</svg>`;
+  return svg;
+}
+
+function montarDashboardRelatorio(){
+  const { canais, midias } = REL_ULTIMO;
+  const img = (midias||[]).find(m=>m.tipo==='image') || {total_agora:0};
+  const vid = (midias||[]).find(m=>m.tipo==='video')  || {total_agora:0};
+
+  const graficoMidias = graficoBarrasSvg([
+    { label:'Imagens', valor: img.total_agora, cor:'#F5C518' },
+    { label:'Vídeos',  valor: vid.total_agora, cor:'#5aa9ff' },
+  ]);
+
+  const dadosDias = [];
+  (canais||[]).forEach(c=>{
+    dadosDias.push({ label: c.canal+' online', valor: c.dias_online, cor:'#34d399' });
+    dadosDias.push({ label: c.canal+' offline', valor: c.dias_total-c.dias_online, cor:'#f4606b' });
+  });
+  const graficoDias = dadosDias.length ? graficoBarrasSvg(dadosDias, 560)
+    : '<div class="empty"><b>Sem dados nesse período</b></div>';
+
+  return `<div style="padding:8px 20px 20px;display:flex;flex-direction:column;gap:26px">
+    <div>
+      <div style="font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Mídias ativas no momento</div>
+      ${graficoMidias}
+    </div>
+    <div>
+      <div style="font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Dias online × offline por canal</div>
+      ${graficoDias}
+    </div>
+  </div>`;
+}
+
 // separado do gerarRelatorio() pra poder ser chamado de novo (sem bater no
 // banco) só pra redesenhar quando a pessoa marca/desmarca uma coluna
 function montarPainelRelatorio(){
@@ -760,6 +818,18 @@ function montarPainelRelatorio(){
 
   const cnpjLinha = (REL_COLS_VISIVEIS.cnpj && contaCnpj) ? `<div style="color:var(--mut);font-size:12.5px;margin-top:2px">CNPJ: ${esc(contaCnpj)}</div>` : '';
 
+  const tabBtn = (modo, label)=>
+    `<button type="button" onclick="alternarVisaoRelatorio('${modo}')"
+       style="padding:7px 14px;border-radius:999px;font-size:12.5px;font-weight:600;border:1px solid ${REL_VISAO===modo?'rgba(245,168,0,.4)':'var(--line)'};
+       background:${REL_VISAO===modo?'var(--gold-soft)':'var(--surf2)'};color:${REL_VISAO===modo?'var(--gold)':'var(--mut)'}">${label}</button>`;
+
+  const corpoTabela = `<div style="padding:0 20px 16px">
+      <div style="font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Mostrar no relatório (tela, CSV e PDF)</div>
+      ${checkboxesHtml}
+    </div>
+    <table><thead><tr><th>Canal</th>${colunasAtivas.map(c=>`<th>${c.label}</th>`).join('')}<th>Dias online</th><th>Dias offline</th><th>Dias no período</th></tr></thead>
+      <tbody>${linhasCanais}</tbody></table>`;
+
   return `<div class="panel"><div class="panel-h"><div><h3>${esc(contaNome||'')}</h3>${cnpjLinha}</div><span class="hint">${esc(inicio)} a ${esc(fim)}</span></div>
     <div style="padding:16px 20px;display:flex;gap:24px;flex-wrap:wrap">
       <div class="kpi"><div class="lab">Imagens ativas no momento</div><div class="val">${img.total_agora}</div></div>
@@ -767,16 +837,13 @@ function montarPainelRelatorio(){
       <div class="kpi"><div class="lab">Imagens inseridas no período</div><div class="val">${img.total_periodo}</div></div>
       <div class="kpi"><div class="lab">Vídeos inseridos no período</div><div class="val">${vid.total_periodo}</div></div>
     </div>
-    <div style="padding:0 20px 16px">
-
-      <div style="font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Mostrar no relatório (tela, CSV e PDF)</div>
-      ${checkboxesHtml}
+    <div style="padding:0 20px 6px;display:flex;gap:8px">
+      ${tabBtn('tabela','☰ Tabela')}${tabBtn('dashboard','▥ Dashboard')}
     </div>
-    <table><thead><tr><th>Canal</th>${colunasAtivas.map(c=>`<th>${c.label}</th>`).join('')}<th>Dias online</th><th>Dias offline</th><th>Dias no período</th></tr></thead>
-      <tbody>${linhasCanais}</tbody></table>
+    ${REL_VISAO==='dashboard' ? montarDashboardRelatorio() : corpoTabela}
     <div style="padding:16px 20px;display:flex;gap:8px">
       <button class="ghost" onclick="exportarRelatorioCSV()">⬇ Exportar CSV</button>
-      <button class="ghost" onclick="exportarRelatorioPDF()">⬇ Exportar PDF</button>
+      <button class="ghost" onclick="exportarRelatorioPDF()">⬇ Exportar PDF (com gráficos)</button>
     </div></div>`;
 }
 
@@ -844,12 +911,26 @@ function exportarRelatorioPDF(){
     return `<tr><td>${esc(c.canal)}</td>${extras}<td>${c.dias_online}</td><td>${c.dias_total-c.dias_online}</td><td>${c.dias_total}</td></tr>`;
   }).join('');
 
+  // mesma função de gráfico usada na tela — já usa cor fixa (hex), não
+  // depende do var(--xxx) do painel, então funciona igual aqui fora
+  const graficoMidiasPdf = graficoBarrasSvg([
+    { label:'Imagens', valor: img.total_agora, cor:'#F5C518' },
+    { label:'Vídeos',  valor: vid.total_agora, cor:'#5aa9ff' },
+  ], 480);
+  const dadosDiasPdf = [];
+  canais.forEach(c=>{
+    dadosDiasPdf.push({ label: c.canal+' online', valor: c.dias_online, cor:'#34d399' });
+    dadosDiasPdf.push({ label: c.canal+' offline', valor: c.dias_total-c.dias_online, cor:'#f4606b' });
+  });
+  const graficoDiasPdf = dadosDiasPdf.length ? graficoBarrasSvg(dadosDiasPdf, 520) : '';
+
   // PDF via impressão do navegador: zero biblioteca nova, funciona em
   // qualquer computador — a pessoa escolhe "Salvar como PDF" na impressora.
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Relatório BlinPlay</title>
     <style>
       body{font-family:Arial,sans-serif;color:#111;padding:30px}
       h1{font-size:20px;margin-bottom:4px}
+      h2{font-size:14.5px;margin:24px 0 10px;color:#333}
       .sub{color:#555;font-size:13px;margin-bottom:20px}
       table{width:100%;border-collapse:collapse;margin-top:10px}
       th,td{border:1px solid #ccc;padding:8px 10px;font-size:13px;text-align:left}
@@ -866,6 +947,11 @@ function exportarRelatorioPDF(){
       <div class="kpi">Imagens inseridas no período<b>${img.total_periodo}</b></div>
       <div class="kpi">Vídeos inseridos no período<b>${vid.total_periodo}</b></div>
     </div>
+    <h2>Mídias ativas no momento</h2>
+    ${graficoMidiasPdf}
+    <h2>Dias online × offline por canal</h2>
+    ${graficoDiasPdf}
+    <h2>Detalhamento por canal</h2>
     <table><thead><tr><th>Canal</th>${colunasAtivas.map(c=>`<th>${c.label}</th>`).join('')}<th>Dias online</th><th>Dias offline</th><th>Dias no período</th></tr></thead>
       <tbody>${linhas}</tbody></table>
     <script>window.onload = function(){ window.print(); };<\/script>
@@ -2027,7 +2113,7 @@ async function editarConta(id){
   if(error || !a){ alert('Não foi possível carregar os dados da conta.'); return; }
 
   const anexoInfo = a.anexo_path
-    ? `<a href="#" onclick="abrirAnexoConta('${escJ(a.anexo_path)}');return false">📎 ${esc(a.anexo_nome||'arquivo anexado')}</a>
+    ? `<a href="#" onclick="abrirAnexoConta('${escJ(a.anexo_path)}');return false">${esc(a.anexo_nome||'arquivo anexado')}</a>
        <button class="mini danger" style="margin-left:8px" onclick="removerAnexoConta('${a.id}')">Remover</button>`
     : `<span style="color:var(--mut)">Nenhum arquivo anexado</span>`;
 
