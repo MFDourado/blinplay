@@ -852,9 +852,14 @@ function montarDashboardRelatorio(){
       { valor: m.dias_offline, cor:'#f4606b' },
     ],
   }));
+  const totalOnlineMensal = (mensal||[]).reduce((s,m)=>s+m.dias_online,0);
+  const totalOfflineMensal = (mensal||[]).reduce((s,m)=>s+m.dias_offline,0);
+  const totalDiasHtml = `<div style="font-size:12.5px;color:#a8abb4;margin:-6px 0 14px">
+      Total no período: <b style="color:#34d399">${totalOnlineMensal} online</b> · <b style="color:#f4606b">${totalOfflineMensal} offline</b>
+    </div>`;
   const cartaoDias = cartaoDashboard('Dias online x offline por mês',
     gruposMensal.length
-      ? `<div style="display:flex;gap:20px;align-items:flex-end;flex-wrap:wrap">
+      ? totalDiasHtml + `<div style="display:flex;gap:20px;align-items:flex-end;flex-wrap:wrap">
           ${graficoColunasAgrupadasSvg(gruposMensal, 380, 210, '#a8abb4', '#fff')}
           ${legendaGrafico([{label:'Online',cor:'#34d399'},{label:'Offline',cor:'#f4606b'}], '#a8abb4', '#fff', true)}
         </div>`
@@ -998,6 +1003,8 @@ function exportarRelatorioPDF(){
   }));
   const graficoDiasPdf = gruposMensalPdf.length ? graficoColunasAgrupadasSvg(gruposMensalPdf, 480, 220, '#555', '#222', '#e5e5e5') : '';
   const legendaDiasPdf = legendaGrafico([{label:'Online',cor:'#34d399'},{label:'Offline',cor:'#f4606b'}], '#555', '#222', true);
+  const totalOnlinePdf = (mensal||[]).reduce((s,m)=>s+m.dias_online,0);
+  const totalOfflinePdf = (mensal||[]).reduce((s,m)=>s+m.dias_offline,0);
 
   // PDF via impressão do navegador: zero biblioteca nova, funciona em
   // qualquer computador — a pessoa escolhe "Salvar como PDF" na impressora.
@@ -1026,6 +1033,7 @@ function exportarRelatorioPDF(){
     <h2>Mídias ativas no momento</h2>
     <div class="grafico-linha">${graficoMidiasPdf}${legendaMidiasPdf}</div>
     <h2>Dias online x offline por mês</h2>
+    ${gruposMensalPdf.length ? `<div class="sub" style="margin-bottom:8px">Total no período: <b>${totalOnlinePdf} online</b> · <b>${totalOfflinePdf} offline</b></div>` : ''}
     <div class="grafico-linha">${graficoDiasPdf}${legendaDiasPdf}</div>
     <h2>Detalhamento por canal</h2>
     <table><thead><tr><th>Canal</th>${colunasAtivas.map(c=>`<th>${c.label}</th>`).join('')}<th>Dias online</th><th>Dias offline</th><th>Dias no período</th></tr></thead>
