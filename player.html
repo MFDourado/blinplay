@@ -369,6 +369,19 @@ function estadoSW(){
   return 'ATIVO';
 }
 
+// nomes amigáveis pro HUD — os códigos internos (hora, clima...) viram
+// texto que faz sentido pra quem está lendo o painel de diagnóstico
+const NOMES_WIDGETS = {
+  hora:'Hora certa', data:'Data', frase:'Frase motivacional',
+  clima:'Previsão do tempo', cotacao:'Cotação de moeda',
+  loteria:'Resultado de loteria', brasileirao:'Campeonato Brasileiro',
+};
+function widgetsAtivosTexto(){
+  const tipos = [...new Set(playlist.filter(p=>p.tipo==='widget').map(p=>p.widgetTipo))];
+  if(!tipos.length) return 'nenhum';
+  return tipos.map(t=> NOMES_WIDGETS[t] || t).join(', ');
+}
+
 function pintarHud(){
   if(!DIAG) return;
   const h = heapMB();
@@ -385,6 +398,7 @@ function pintarHud(){
     'cache....: '+(ultEstimate? (ultEstimate.usage/1048576).toFixed(1)+' MB de '+(ultEstimate.quota/1048576).toFixed(0)+' MB' : 'medindo...'),
     'heap.....: '+(h? h.usado+' / '+h.total+' MB  (limite '+h.limite+')' : 'n/d'),
     'playlist.: '+playlist.length+' itens, indisp='+indisponiveis.size,
+    'widgets..: '+widgetsAtivosTexto(),
     'mídias...: '+auditoria.ok+'/'+auditoria.total+' em cache'+
       (auditoria.faltando.length? '  <b>FALTAM '+auditoria.faltando.length+'</b>' : ''),
     'tocando..: #'+idx+' '+(item? escP((item.tipo||'?')+' '+String(item.path||'').slice(-26)) : '-'),
