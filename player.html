@@ -86,7 +86,7 @@
 
 <script>
 /* ================= CONFIG ================= */
-const PLAYER_VERSION = 'v5.1';   // versão do player — aparece na coluna VERSÃO do painel
+const PLAYER_VERSION = 'v5.2';   // versão do player — aparece na coluna VERSÃO do painel
 const MEDIA_BASE = SB_URL + '/storage/v1/object/public/blinplay-media/';
 const RESYNC_FALLBACK_MS = 15 * 1000;  // FALLBACK rápido: checa a cada 15s quando Realtime NÃO está confirmado
 let resyncTimer = null;
@@ -1692,24 +1692,34 @@ function ligarFallback(){
   let tickPoll = 0;
   resyncTimer = setInterval(async ()=>{
     if(!navigator.onLine) return;     // offline: não gasta CPU com RPC que vai falhar
-
-    /* A2 — realtimeOK era escrita e nunca lida: o polling de 15s rodava sempre,
-       mesmo com o Realtime saudável entregando os mesmos eventos. Em 150 boxes
-       são ~600 RPCs por minuto sem função nenhuma. Com o Realtime confirmado,
-       o polling vira rede de segurança e cai para 2 minutos. */
     tickPoll++;
-    if(realtimeOK && (tickPoll % 8 !== 0)) return;
 
+    /* A9 — o checar_refresh (pedido de "Atualizar tela") saiu do throttle
+       do Realtime saudável. Motivo: WebSocket no Android TV às vezes cai
+       "em silêncio" — sem disparar CLOSED/CHANNEL_ERROR/TIMED_OUT — e
+       realtimeOK continuava true indefinidamente. Nesse cenário, o
+       fallback só rodava a cada 2min, e como a janela de detecção é de
+       20s, o pedido de refresh quase sempre já tinha "vencido" quando a
+       checagem finalmente rodava — o botão "Atualizar tela" parecia não
+       funcionar. checar_refresh é 1 linha, custo desprezível: roda
+       sempre a cada 15s, saudável ou não. Só o resto (checar se a
+       programação mudou, mais caro) continua sendo throttled abaixo. */
     try{
-      // 1) pedido de refresh remoto?
       const r = await sb.rpc('checar_refresh', { p_token: token });
       if(r && r.data){
         const quando = new Date(r.data).getTime();
         if(Date.now()-quando < 20000){ location.reload(); return; }
       }
     }catch(e){}
+
+    /* A2 — realtimeOK era escrita e nunca lida: o polling de 15s rodava sempre,
+       mesmo com o Realtime saudável entregando os mesmos eventos. Em 150 boxes
+       são ~600 RPCs por minuto sem função nenhuma. Com o Realtime confirmado,
+       o polling vira rede de segurança e cai para 2 minutos. */
+    if(realtimeOK && (tickPoll % 8 !== 0)) return;
+
     try{
-      // 2) a programação mudou?
+      // a programação mudou?
       const { data } = await sb.rpc('get_player_schedule', { p_token: token });
       if(data && data.ok!==false){
         const novaSig = assinatura(montarPlaylist(data));
