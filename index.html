@@ -983,10 +983,12 @@ function exportarRelatorioPDF(){
   // mesmas funções de gráfico usadas na tela — cor fixa (hex), não
   // depende do var(--xxx) do painel, então funciona igual aqui fora.
   // Aqui é fundo branco (impressão), então texto escuro — o padrão da função.
-  const graficoMidiasPdf = graficoDonutSvg([
+  const dadosMidiasPdf = [
     { label:'Imagens', valor: img.total_agora, cor:'#F5C518' },
     { label:'Vídeos',  valor: vid.total_agora, cor:'#5aa9ff' },
-  ], 170, '#222', '#555');
+  ];
+  const graficoMidiasPdf = graficoDonutSvg(dadosMidiasPdf, 170, '#222', '#555');
+  const legendaMidiasPdf = legendaGrafico(dadosMidiasPdf, '#555', '#222');
   const gruposMensalPdf = (mensal||[]).map(m=> ({
     label: labelMes(m.mes_ord),
     valores: [
@@ -995,6 +997,7 @@ function exportarRelatorioPDF(){
     ],
   }));
   const graficoDiasPdf = gruposMensalPdf.length ? graficoColunasAgrupadasSvg(gruposMensalPdf, 480, 220, '#555', '#222', '#e5e5e5') : '';
+  const legendaDiasPdf = legendaGrafico([{label:'Online',cor:'#34d399'},{label:'Offline',cor:'#f4606b'}], '#555', '#222', true);
 
   // PDF via impressão do navegador: zero biblioteca nova, funciona em
   // qualquer computador — a pessoa escolhe "Salvar como PDF" na impressora.
@@ -1009,6 +1012,7 @@ function exportarRelatorioPDF(){
       th{background:#f2f2f2}
       .kpis{display:flex;gap:24px;margin:14px 0}
       .kpi b{font-size:20px;display:block}
+      .grafico-linha{display:flex;align-items:center;gap:24px;flex-wrap:wrap}
     </style></head><body>
     <h1>Relatório BlinPlay — ${esc(contaNome||'')}</h1>
     ${(REL_COLS_VISIVEIS.cnpj && contaCnpj) ? `<div class="sub">CNPJ: ${esc(contaCnpj)}</div>` : ''}
@@ -1020,9 +1024,9 @@ function exportarRelatorioPDF(){
       <div class="kpi">Vídeos inseridos no período<b>${vid.total_periodo}</b></div>
     </div>
     <h2>Mídias ativas no momento</h2>
-    ${graficoMidiasPdf}
+    <div class="grafico-linha">${graficoMidiasPdf}${legendaMidiasPdf}</div>
     <h2>Dias online x offline por mês</h2>
-    ${graficoDiasPdf}
+    <div class="grafico-linha">${graficoDiasPdf}${legendaDiasPdf}</div>
     <h2>Detalhamento por canal</h2>
     <table><thead><tr><th>Canal</th>${colunasAtivas.map(c=>`<th>${c.label}</th>`).join('')}<th>Dias online</th><th>Dias offline</th><th>Dias no período</th></tr></thead>
       <tbody>${linhas}</tbody></table>
