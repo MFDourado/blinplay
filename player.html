@@ -86,7 +86,7 @@
 
 <script>
 /* ================= CONFIG ================= */
-const PLAYER_VERSION = 'v5.0d';   // versão do player — aparece na coluna VERSÃO do painel
+const PLAYER_VERSION = 'v5.1';   // versão do player — aparece na coluna VERSÃO do painel
 const MEDIA_BASE = SB_URL + '/storage/v1/object/public/blinplay-media/';
 const RESYNC_FALLBACK_MS = 15 * 1000;  // FALLBACK rápido: checa a cada 15s quando Realtime NÃO está confirmado
 let resyncTimer = null;
@@ -1469,6 +1469,22 @@ async function sincronizar(primeira){
     if(!data || data.ok === false){
       showMsg('Token inválido ou canal inativo.<br>Verifique a URL configurada no box.', false);
       return;
+    }
+
+    // ATUALIZAÇÃO AUTOMÁTICA: compara a própria versão com a mais nova
+    // publicada (guardada no banco, em app_config). Se estiver desatualizado,
+    // recarrega sozinho — sem precisar de clique manual nem esperar a
+    // manutenção das 4h. Mesmo teto de recargas por sessão que já protege
+    // o resto do código contra loop (nunca um mecanismo novo de proteção).
+    if(data.versao_atual && data.versao_atual !== PLAYER_VERSION){
+      if(recargas >= MAX_RECARGAS){
+        logar('VERSAO desatualizada ('+PLAYER_VERSION+' -> '+data.versao_atual+') mas teto de recargas atingido');
+      } else {
+        recargas++;
+        logar('VERSAO desatualizada ('+PLAYER_VERSION+' -> '+data.versao_atual+') — recarregando ('+recargas+'/'+MAX_RECARGAS+')');
+        location.reload();
+        return;
+      }
     }
     // guarda a última programação boa (pra abrir offline na próxima vez)
     try{ localStorage.setItem('blinplay_sched_'+token, JSON.stringify(data)); }catch(e){}
