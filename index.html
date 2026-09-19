@@ -740,8 +740,10 @@ function alternarVisaoRelatorio(modo){
 // gráfico de barras em SVG puro — sem biblioteca nenhuma, por isso
 // funciona idêntico na tela e no PDF exportado (que é so o navegador
 // imprimindo o HTML)
-function graficoBarrasSvg(dados, larguraTotal){
+function graficoBarrasSvg(dados, larguraTotal, corTexto, corRotulo){
   larguraTotal = larguraTotal || 520;
+  corTexto = corTexto || '#222';       // valor da barra — dark por padrão (PDF, fundo branco)
+  corRotulo = corRotulo || '#8a8d96';  // rótulo à esquerda — sempre neutro, lê bem nos dois fundos
   const alturaBarra = 26, gap = 12, rotuloW = 150;
   const larguraBarraMax = larguraTotal - rotuloW - 50;
   const maxValor = Math.max(1, ...dados.map(d=>d.valor));
@@ -750,12 +752,50 @@ function graficoBarrasSvg(dados, larguraTotal){
   dados.forEach((d,i)=>{
     const y = gap + i*(alturaBarra+gap);
     const w = Math.max(2, (d.valor/maxValor) * larguraBarraMax);
-    svg += `<text x="0" y="${y+alturaBarra*0.68}" font-size="12.5" font-family="Arial,sans-serif" fill="#8a8d96">${esc(d.label)}</text>`;
+    svg += `<text x="0" y="${y+alturaBarra*0.68}" font-size="12.5" font-family="Arial,sans-serif" fill="${corRotulo}">${esc(d.label)}</text>`;
     svg += `<rect x="${rotuloW}" y="${y}" width="${w}" height="${alturaBarra}" rx="5" fill="${d.cor}"></rect>`;
-    svg += `<text x="${rotuloW+w+8}" y="${y+alturaBarra*0.68}" font-size="13" font-family="Arial,sans-serif" font-weight="700" fill="#222">${d.valor}</text>`;
+    svg += `<text x="${rotuloW+w+8}" y="${y+alturaBarra*0.68}" font-size="13" font-family="Arial,sans-serif" font-weight="700" fill="${corTexto}">${d.valor}</text>`;
   });
   svg += `</svg>`;
   return svg;
+}
+
+// gráfico de rosca (donut) em SVG puro — cada fatia é um trecho tracejado
+// de um círculo (stroke-dasharray), mais simples que desenhar arco por arco
+function graficoDonutSvg(dados, tamanho, corTextoCentro, corRotuloLegenda){
+  tamanho = tamanho || 190;
+  corTextoCentro = corTextoCentro || '#222';
+  corRotuloLegenda = corRotuloLegenda || '#8a8d96';
+  const total = dados.reduce((s,d)=>s+d.valor,0);
+  const raio = tamanho/2 - 16, centro = tamanho/2;
+  const circ = 2*Math.PI*raio;
+  let acumulado = 0, arcos = '';
+  if(total>0){
+    dados.forEach(d=>{
+      if(d.valor<=0) return;
+      const fracao = d.valor/total;
+      const comprimento = Math.max(0.6, fracao*circ - 2); // -2 = respiro entre fatias
+      const offset = -acumulado*circ;
+      arcos += `<circle cx="${centro}" cy="${centro}" r="${raio}" fill="none" stroke="${d.cor}" stroke-width="24"
+        stroke-dasharray="${comprimento} ${circ-comprimento}" stroke-dashoffset="${offset}"
+        stroke-linecap="round" transform="rotate(-90 ${centro} ${centro})"></circle>`;
+      acumulado += fracao;
+    });
+  } else {
+    arcos = `<circle cx="${centro}" cy="${centro}" r="${raio}" fill="none" stroke="#3a3a42" stroke-width="24"></circle>`;
+  }
+  return `<div style="display:flex;align-items:center;gap:22px;flex-wrap:wrap">
+    <svg viewBox="0 0 ${tamanho} ${tamanho}" width="${tamanho}" height="${tamanho}">
+      ${arcos}
+      <text x="${centro}" y="${centro-2}" text-anchor="middle" font-size="26" font-weight="800" font-family="Arial,sans-serif" fill="${corTextoCentro}">${total}</text>
+      <text x="${centro}" y="${centro+17}" text-anchor="middle" font-size="10.5" font-family="Arial,sans-serif" fill="${corRotuloLegenda}">total</text>
+    </svg>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      ${dados.map(d=>`<span style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:${corRotuloLegenda}">
+        <span style="width:11px;height:11px;border-radius:3px;background:${d.cor};display:inline-block;flex-shrink:0"></span>${esc(d.label)} — <b style="color:${corTextoCentro}">${d.valor}</b>
+      </span>`).join('')}
+    </div>
+  </div>`;
 }
 
 function montarDashboardRelatorio(){
@@ -763,23 +803,24 @@ function montarDashboardRelatorio(){
   const img = (midias||[]).find(m=>m.tipo==='image') || {total_agora:0};
   const vid = (midias||[]).find(m=>m.tipo==='video')  || {total_agora:0};
 
-  const graficoMidias = graficoBarrasSvg([
+  const donutMidias = graficoDonutSvg([
     { label:'Imagens', valor: img.total_agora, cor:'#F5C518' },
     { label:'Vídeos',  valor: vid.total_agora, cor:'#5aa9ff' },
-  ]);
+  ], 190, '#fff', '#a8abb4');
 
   const dadosDias = [];
   (canais||[]).forEach(c=>{
     dadosDias.push({ label: c.canal+' online', valor: c.dias_online, cor:'#34d399' });
     dadosDias.push({ label: c.canal+' offline', valor: c.dias_total-c.dias_online, cor:'#f4606b' });
   });
-  const graficoDias = dadosDias.length ? graficoBarrasSvg(dadosDias, 560)
+  // tela = fundo escuro -> número da barra em branco; rótulo continua neutro
+  const graficoDias = dadosDias.length ? graficoBarrasSvg(dadosDias, 560, '#fff', '#a8abb4')
     : '<div class="empty"><b>Sem dados nesse período</b></div>';
 
   return `<div style="padding:8px 20px 20px;display:flex;flex-direction:column;gap:26px">
     <div>
       <div style="font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Mídias ativas no momento</div>
-      ${graficoMidias}
+      ${donutMidias}
     </div>
     <div>
       <div style="font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Dias online × offline por canal</div>
@@ -911,12 +952,13 @@ function exportarRelatorioPDF(){
     return `<tr><td>${esc(c.canal)}</td>${extras}<td>${c.dias_online}</td><td>${c.dias_total-c.dias_online}</td><td>${c.dias_total}</td></tr>`;
   }).join('');
 
-  // mesma função de gráfico usada na tela — já usa cor fixa (hex), não
-  // depende do var(--xxx) do painel, então funciona igual aqui fora
-  const graficoMidiasPdf = graficoBarrasSvg([
+  // mesmas funções de gráfico usadas na tela — cor fixa (hex), não
+  // depende do var(--xxx) do painel, então funciona igual aqui fora.
+  // Aqui é fundo branco (impressão), então texto escuro — o padrão da função.
+  const graficoMidiasPdf = graficoDonutSvg([
     { label:'Imagens', valor: img.total_agora, cor:'#F5C518' },
     { label:'Vídeos',  valor: vid.total_agora, cor:'#5aa9ff' },
-  ], 480);
+  ], 170, '#222', '#555');
   const dadosDiasPdf = [];
   canais.forEach(c=>{
     dadosDiasPdf.push({ label: c.canal+' online', valor: c.dias_online, cor:'#34d399' });
