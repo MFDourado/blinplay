@@ -852,7 +852,7 @@ function montarDashboardRelatorio(){
       { valor: m.dias_offline, cor:'#f4606b' },
     ],
   }));
-  const cartaoDias = cartaoDashboard('Dias online × offline por mês',
+  const cartaoDias = cartaoDashboard('Dias online x offline por mês',
     gruposMensal.length
       ? `<div style="display:flex;gap:20px;align-items:flex-end;flex-wrap:wrap">
           ${graficoColunasAgrupadasSvg(gruposMensal, 380, 210, '#a8abb4', '#fff')}
@@ -1021,7 +1021,7 @@ function exportarRelatorioPDF(){
     </div>
     <h2>Mídias ativas no momento</h2>
     ${graficoMidiasPdf}
-    <h2>Dias online × offline por mês</h2>
+    <h2>Dias online x offline por mês</h2>
     ${graficoDiasPdf}
     <h2>Detalhamento por canal</h2>
     <table><thead><tr><th>Canal</th>${colunasAtivas.map(c=>`<th>${c.label}</th>`).join('')}<th>Dias online</th><th>Dias offline</th><th>Dias no período</th></tr></thead>
