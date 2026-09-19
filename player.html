@@ -22,6 +22,22 @@
   .slide.on{opacity:1}
   .slide img,.slide video{width:100%;height:100%;object-fit:contain;background:#000}
 
+  /* widgets (hora, clima, etc) */
+  .widget-slide{background:linear-gradient(160deg,#0d0d12,#1a1a22)}
+  .widget-box{display:flex;flex-direction:column;align-items:center;justify-content:center;
+    font-family:Arial,sans-serif;color:#fff;text-align:center;padding:40px}
+  .widget-clock{font-size:14vw;font-weight:800;letter-spacing:.02em;color:#F5C518;font-variant-numeric:tabular-nums}
+  .widget-data{font-size:4.5vw;font-weight:600;text-transform:capitalize;max-width:90vw}
+  .widget-frase{font-size:4vw;font-weight:600;font-style:italic;max-width:80vw;line-height:1.4}
+  .widget-clima-emoji{font-size:12vw;line-height:1}
+  .widget-clima-temp{font-size:9vw;font-weight:800;color:#F5C518;margin-top:6px}
+  .widget-clima-cidade{font-size:3vw;color:#c9c9d2;margin-top:10px}
+  .widget-titulo{font-size:3.2vw;color:#c9c9d2;margin-bottom:24px;text-transform:uppercase;letter-spacing:.08em}
+  .widget-cotacao-linha{display:flex;gap:20px;justify-content:space-between;width:min(70vw,600px);
+    font-size:4.5vw;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.12)}
+  .widget-cotacao-linha b{color:#F5C518}
+  .widget-loteria-dezenas{font-size:6vw;font-weight:800;color:#F5C518;letter-spacing:.03em}
+
   /* telas de estado (sem token, carregando, erro) */
   #msg{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;
     background:#0a0a0c;color:#f4f3ee;font-family:system-ui,sans-serif;text-align:center;padding:30px;gap:14px}
@@ -848,7 +864,7 @@ function montarPlaylist(data){
   if(padrao.length===0){
     const out=[];
     camps.forEach(c=> c.itens.forEach(it=> out.push({...it, camp:true, campNome:c.nome})));
-    return out;
+    return inserirWidgets(out, data.widgets);
   }
 
   // PRESENÇA MÍNIMA GARANTIDA:
@@ -882,11 +898,213 @@ function montarPlaylist(data){
     }
   });
 
-  return out;
+  return inserirWidgets(out, data.widgets);
+}
+
+// WIDGETS (hora, clima, etc): entram DEPOIS que a playlist de mídia real já
+// está 100% pronta, no MESMO padrão de intervalo que campanha já usa (N =
+// "a cada quantos itens"). Se não há widget nenhum configurado (caso de
+// todos os canais hoje), essa função devolve "out" sem tocar em nada —
+// playlist final idêntica à de antes, item por item.
+function inserirWidgets(out, widgets){
+  if(!widgets || !widgets.length || out.length===0) return out;
+  const final = [];
+  let count = 0;
+  for(let i=0;i<out.length;i++){
+    final.push(out[i]); count++;
+    widgets.forEach(w=>{
+      const N = Math.min(Math.max(1, w.a_cada||5), out.length);
+      if(count % N === 0){
+        final.push({
+          tipo: 'widget',
+          widgetTipo: w.tipo,
+          config: w.config || {},
+          duracao: w.duracao || 8,
+          camp: false, campNome: null,
+        });
+      }
+    });
+  }
+  return final;
+}
+
+/* ================= WIDGETS =================
+   Conteúdo dinâmico (hora, clima, cotação...) sem arquivo de mídia.
+   Cada widget é uma função isolada: se falhar (API fora do ar, timeout,
+   config faltando), o erro é pego aqui e o player só avança pro próximo
+   item — NUNCA trava a exibição. */
+
+async function tocarWidget(item, g, stage){
+  const slide = document.createElement('div');
+  slide.className = 'slide widget-slide';
+
+  const dur = Math.max(3, item.duracao || 8) * 1000;
+  const pular = ()=>{ if(g !== geracao) return; avancar(); };
+
+  // mesmo mecanismo de "revelar" que imagem/vídeo já usa: só aparece (fade)
+  // depois que o conteúdo está pronto, e só aí limpa o slide anterior —
+  // assim nunca existe flash de tela preta na troca.
+  const revelarWidget = ()=>{
+    if(g !== geracao) return;
+    if(slide.classList.contains('on')) return;
+    slide.classList.add('on');
+    const tLimpa = setTimeout(()=>{
+      while(stage.children.length > 2){
+        const velho = stage.firstChild;
+        liberarMidia(velho);
+        stage.removeChild(velho);
+      }
+    }, 700);
+    window.__vidTimers.push({ tipo:'t', id: tLimpa });
+  };
+
+  // widget nunca é campanha — garante que o selo de campanha não fique
+  // preso na tela de uma mídia anterior
+  const flag = document.getElementById('flag');
+  if(flag) flag.classList.remove('show');
+
+  try{
+    await renderizarWidget(item.widgetTipo, item.config || {}, slide);
+    if(g !== geracao) return; // trocou de programação enquanto a API respondia
+    stage.appendChild(slide);
+    revelarWidget();
+    slideTimer = setTimeout(pular, dur);
+  }catch(e){
+    logar('WIDGET falhou ('+item.widgetTipo+'): '+String(e&&e.message||e).slice(0,60));
+    if(g !== geracao) return;
+    setTimeout(pular, 300); // não fica preso: pula rápido pro próximo item
+  }
+}
+
+function renderizarWidget(tipo, config, slide){
+  const COM_TIMEOUT = (p)=> Promise.race([
+    p,
+    new Promise((_,rej)=> setTimeout(()=> rej(new Error('timeout')), 6000)),
+  ]);
+  switch(tipo){
+    case 'hora':        return Promise.resolve(renderHora(slide));
+    case 'data':        return Promise.resolve(renderData(slide));
+    case 'frase':       return Promise.resolve(renderFrase(slide));
+    case 'clima':       return COM_TIMEOUT(renderClima(slide, config));
+    case 'cotacao':     return COM_TIMEOUT(renderCotacao(slide));
+    case 'loteria':     return COM_TIMEOUT(renderLoteria(slide));
+    case 'brasileirao': return COM_TIMEOUT(renderBrasileirao(slide));
+    default: throw new Error('tipo de widget desconhecido: '+tipo);
+  }
+}
+
+function renderHora(slide){
+  slide.innerHTML = '<div class="widget-box"><div class="widget-clock" id="wgHoraTxt"></div></div>';
+  const atualizar = ()=>{
+    const el = document.getElementById('wgHoraTxt');
+    if(!el) return;
+    el.textContent = new Date().toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  };
+  atualizar();
+  // reaproveita a MESMA lista de limpeza que já existe pra timers de vídeo —
+  // ela já é zerada no início de cada tocar(), então esse relógio some
+  // sozinho na próxima troca de slide, sem precisar de código novo pra isso.
+  const iv = setInterval(atualizar, 1000);
+  window.__vidTimers.push({ tipo:'i', id: iv });
+}
+
+function renderData(slide){
+  const txt = new Date().toLocaleDateString('pt-BR', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
+  slide.innerHTML = '<div class="widget-box"><div class="widget-data">'+escP(txt)+'</div></div>';
+}
+
+const FRASES_MOTIVACIONAIS = [
+  'A persistência é o caminho do êxito.',
+  'Grandes conquistas exigem grandes ousadias.',
+  'O sucesso é a soma de pequenos esforços repetidos todos os dias.',
+  'Acredite que você pode, e você já está no meio do caminho.',
+  'A disciplina é a ponte entre metas e realizações.',
+  'Cada dia é uma nova oportunidade de recomeçar.',
+  'Foco no processo, o resultado é consequência.',
+  'Quem sabe pra onde vai, o mundo inteiro abre caminho.',
+  'O melhor investimento é em você mesmo.',
+  'Comece onde você está, use o que você tem, faça o que você pode.',
+];
+function renderFrase(slide){
+  const f = FRASES_MOTIVACIONAIS[Math.floor(Math.random()*FRASES_MOTIVACIONAIS.length)];
+  slide.innerHTML = '<div class="widget-box"><div class="widget-frase">&ldquo;'+escP(f)+'&rdquo;</div></div>';
+}
+
+function emojiClima(code){
+  if(code===0) return '☀️';
+  if([1,2,3].includes(code)) return '⛅';
+  if([45,48].includes(code)) return '🌫️';
+  if([51,53,55,56,57,61,63,65,66,67,80,81,82].includes(code)) return '🌧️';
+  if([71,73,75,77,85,86].includes(code)) return '❄️';
+  if([95,96,99].includes(code)) return '⛈️';
+  return '🌤️';
+}
+async function renderClima(slide, config){
+  const cidade = (config.cidade||'').trim();
+  if(!cidade) throw new Error('sem cidade configurada');
+
+  // cacheia lat/lon no próprio box: evita geocodificar de novo a cada troca
+  const cacheKey = 'blinplay_geo_'+cidade.toLowerCase();
+  let coords = null;
+  try{ coords = JSON.parse(localStorage.getItem(cacheKey)); }catch(e){}
+
+  if(!coords){
+    const gResp = await fetch('https://geocoding-api.open-meteo.com/v1/search?name='+encodeURIComponent(cidade)+'&count=1&language=pt&format=json');
+    const gData = await gResp.json();
+    if(!gData.results || !gData.results[0]) throw new Error('cidade não encontrada');
+    coords = { lat: gData.results[0].latitude, lon: gData.results[0].longitude };
+    try{ localStorage.setItem(cacheKey, JSON.stringify(coords)); }catch(e){}
+  }
+
+  const wResp = await fetch('https://api.open-meteo.com/v1/forecast?latitude='+coords.lat+'&longitude='+coords.lon+'&current=temperature_2m,weather_code&timezone=America%2FSao_Paulo');
+  const wData = await wResp.json();
+  const temp = wData.current && wData.current.temperature_2m;
+  const code = wData.current && wData.current.weather_code;
+  if(temp === undefined || temp === null) throw new Error('sem dado de temperatura');
+
+  slide.innerHTML = '<div class="widget-box">'
+    + '<div class="widget-clima-emoji">'+emojiClima(code)+'</div>'
+    + '<div class="widget-clima-temp">'+Math.round(temp)+'°C</div>'
+    + '<div class="widget-clima-cidade">'+escP(cidade)+'</div></div>';
+}
+
+async function renderCotacao(slide){
+  const r = await fetch('https://economia.awesomeapi.com.br/last/USD-BRL,EUR-BRL');
+  const j = await r.json();
+  const usd = j.USDBRL && parseFloat(j.USDBRL.bid);
+  const eur = j.EURBRL && parseFloat(j.EURBRL.bid);
+  if(!usd && !eur) throw new Error('sem cotação disponível');
+  slide.innerHTML = '<div class="widget-box widget-cotacao">'
+    + '<div class="widget-titulo">Cotação do dia</div>'
+    + (usd ? '<div class="widget-cotacao-linha"><span>Dólar</span><b>R$ '+usd.toFixed(2)+'</b></div>' : '')
+    + (eur ? '<div class="widget-cotacao-linha"><span>Euro</span><b>R$ '+eur.toFixed(2)+'</b></div>' : '')
+    + '</div>';
+}
+
+async function renderLoteria(slide){
+  const r = await fetch('https://servicebus2.caixa.gov.br/portaldeloterias/api/megasena');
+  const j = await r.json();
+  const dezenas = (j.listaDezenas||[]).join(' - ');
+  if(!dezenas) throw new Error('sem resultado disponível');
+  slide.innerHTML = '<div class="widget-box widget-loteria">'
+    + '<div class="widget-titulo">Mega-Sena · Concurso '+escP(String(j.numero||''))+'</div>'
+    + '<div class="widget-loteria-dezenas">'+escP(dezenas)+'</div></div>';
+}
+
+async function renderBrasileirao(slide){
+  // PROPOSITALMENTE DESLIGADO POR ENQUANTO: não existe fonte oficial
+  // gratuita e estável pra isso (só APIs de comunidade, sem garantia).
+  // Preferimos falhar sempre aqui (e o player pula pro próximo item,
+  // sem quebrar nada) até validarmos uma fonte confiável de verdade.
+  throw new Error('fonte do Campeonato Brasileiro ainda não configurada');
 }
 
 function assinatura(pl){
-  return pl.map(x=>(x.camp?'C':'P')+x.path+(x.duracao||0)).join('|');
+  // para item de mídia normal, comportamento idêntico a antes (x.path sempre
+  // existe, o '||' nunca é usado). Só entra em jogo pra widget, que não tem
+  // arquivo — sem isso, mudar a cidade do clima não seria detectado como
+  // mudança de programação.
+  return pl.map(x=>(x.camp?'C':'P')+(x.path || ('W:'+x.widgetTipo+':'+JSON.stringify(x.config||{})))+(x.duracao||0)).join('|');
 }
 
 /* ---- liberação explícita de recursos de mídia ----
@@ -979,6 +1197,14 @@ function tocar(){
     const anterior = stage.lastElementChild;
     const va = anterior.querySelector && anterior.querySelector('video');
     if(va){ try{ va.pause(); }catch(e){} }
+  }
+
+  // WIDGETS: conteúdo dinâmico (hora, clima, etc), sem arquivo de mídia.
+  // Desvio TOTAL do fluxo abaixo — path/URL de mídia nem chegam a ser
+  // calculados. Tudo que segue (imagem/vídeo) continua exatamente como era.
+  if(item.tipo === 'widget'){
+    tocarWidget(item, g, stage);
+    return;
   }
 
   // cria o slide novo
