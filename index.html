@@ -465,7 +465,7 @@ function escJ(v){
    Existe porque, sem ela, não há como saber qual index.html está publicado —
    e subir um arquivo antigo por engano é indistinguível de um recurso que
    não funcionou. */
-const PAINEL_VERSAO = 'v2.7';
+const PAINEL_VERSAO = 'v2.6';
 console.log('[BlinPlay] painel', PAINEL_VERSAO);
 
 /* ---------------- NAVEGAÇÃO ---------------- */
@@ -1132,22 +1132,27 @@ function linhasEstacoes(){
   else if(EST_FILTRO==='offline') list = list.filter(c=>!canalOnline(c));
 
   if(!EST_CHS.length){
-    return '<tr><td colspan="6"><div class="empty"><b>Nenhuma estação ainda</b>Cadastre uma conta primeiro, depois adicione os canais (boxes) dela.</div></td></tr>';
+    return '<tr><td colspan="7"><div class="empty"><b>Nenhuma estação ainda</b>Cadastre uma conta primeiro, depois adicione os canais (boxes) dela.</div></td></tr>';
   }
   if(!list.length){
     const rotulo = EST_FILTRO==='online' ? 'online' : 'offline';
-    return `<tr><td colspan="6"><div class="empty"><b>Nenhum box ${rotulo} agora</b></div></td></tr>`;
+    return `<tr><td colspan="7"><div class="empty"><b>Nenhum box ${rotulo} agora</b></div></td></tr>`;
   }
   return list.map(c=>{
     const online = canalOnline(c);
     const visto = c.last_seen_at ? tempoRel(c.last_seen_at) : 'nunca';
     const url = location.origin+location.pathname.replace(/index\.html$/,'')+'player.html?token='+c.device_token;
     const cod = c.codigo_curto||'—';
+    const criado = c.created_at ? new Date(c.created_at).toLocaleDateString('pt-BR') : '—';
     const nProg = EST_NPL[c.id] || 0;
     return `<tr class="row" style="${c.ativo?'':'opacity:.5'}">
       <td><div class="est-name">${esc(c.accounts?c.accounts.nome:'—')}</div><div class="est-sub">Canal: ${esc(c.nome)}</div></td>
       <td><span class="stat ${online?'on':'off'}"><span class="dot ${online?'on':'off'}"></span>${online?'Online':'Offline'}</span></td>
-      <td><span style="font-family:monospace;font-size:18px;letter-spacing:2px;color:var(--gold,#F5A800);font-weight:700">${esc(cod)}</span></td>
+      <td>
+        <span id="codSpan-${c.id}" data-cod="${escA(cod)}" style="font-family:monospace;font-size:18px;letter-spacing:2px;color:var(--gold,#F5A800);font-weight:700">••••••</span>
+        <button class="mini" onclick="alternarCodigoVisivel('${c.id}', this)">Mostrar</button>
+      </td>
+      <td style="color:var(--mut)">${criado}</td>
       <td style="color:var(--mut)">${visto}</td>
       <td style="color:var(--mut)">${esc(c.player_version||'—')}
           <div class="est-sub">${nProg? nProg+' na programação' : 'sem programação'}${c.ativo?'':' · INATIVO'}</div></td>
@@ -1159,6 +1164,19 @@ function linhasEstacoes(){
         <button class="mini danger" onclick='excluirCanal("${c.id}","${escA(c.nome)}",${EST_NPL[c.id]||0})'>🗑</button>
       </td></tr>`;
   }).join('');
+}
+
+function alternarCodigoVisivel(id, btn){
+  const span = document.getElementById('codSpan-'+id);
+  if(!span) return;
+  const oculto = span.textContent.trim() === '••••••';
+  if(oculto){
+    span.textContent = span.dataset.cod;
+    if(btn) btn.textContent = 'Ocultar';
+  } else {
+    span.textContent = '••••••';
+    if(btn) btn.textContent = 'Mostrar';
+  }
 }
 
 function filtrarEstacoes(chave){
@@ -1584,7 +1602,7 @@ const VIEWS = {
   async estacoes(){
     const [{ data: chs, error }, { data: pl }] = await Promise.all([
       sb.from('channels')
-        .select('id,nome,descricao,device_token,codigo_curto,ativo,last_seen_at,player_version,account_id,accounts(nome,cnpj)')
+        .select('id,nome,descricao,device_token,codigo_curto,ativo,last_seen_at,player_version,account_id,created_at,accounts(nome,cnpj)')
         .order('created_at',{ascending:true}),
       sb.from('playlist_items').select('channel_id'),
     ]);
@@ -1609,7 +1627,7 @@ const VIEWS = {
         </div></div>`
     +`<div class="panel"><div class="panel-h"><h3>Estações</h3><span class="hint">online = visto nos últimos 5 min</span></div>
       <div class="est-tabs" id="estTabs">${estTabsHtml()}</div>
-      <table><thead><tr><th>Hotel / Canal</th><th>Status</th><th>Código</th><th>Último acesso</th><th>Versão</th><th></th></tr></thead><tbody id="estBody">${linhasEstacoes()}</tbody></table></div>`;
+      <table><thead><tr><th>Hotel / Canal</th><th>Status</th><th>Código</th><th>Criado em</th><th>Último acesso</th><th>Versão</th><th></th></tr></thead><tbody id="estBody">${linhasEstacoes()}</tbody></table></div>`;
   },
   async midia(){
     const { data: meds, error } = await sb.from('media')
