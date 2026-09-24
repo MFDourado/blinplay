@@ -1466,6 +1466,62 @@ async function buscarCanaisOverview(){
   return await sb.from('channels').select(BASICO).eq('ativo',true).order('created_at');
 }
 
+let DV_CHS = [];          // guarda os dispositivos já buscados, pra filtrar sem refetch
+let DV_BUSCA = '';
+
+function linhaDispositivo(c){
+  const on = c.last_seen_at && (Date.now()-new Date(c.last_seen_at).getTime() < 5*60*1000);
+  const hotel = c.accounts ? c.accounts.nome : '—';
+  const cnpj  = c.accounts && c.accounts.cnpj ? c.accounts.cnpj : '';
+  const pct = (c.storage_total && c.storage_livre != null)
+    ? Math.round(100*(c.storage_total-c.storage_livre)/c.storage_total) : null;
+  const gb = n => n==null ? '—' : (n/1073741824).toFixed(1)+' GB';
+  const nomeEsc = String(c.nome||'').replace(/"/g,'&quot;');
+  return `<tr class="row">
+    <td><div class="est-name">${esc(hotel)}</div>
+        <div class="est-sub">${esc(cnpj||'sem CNPJ')}</div></td>
+    <td><div class="est-name" style="font-size:13px">${esc(c.nome||'—')}</div>
+        <div class="est-sub">código ${esc(c.codigo_curto||'—')}</div></td>
+    <td style="font-family:ui-monospace,monospace;font-size:12px;color:${c.mac_wifi?'var(--txt)':'#5f5f68'}">
+        ${esc(c.mac_wifi || 'não cadastrado')}</td>
+    <td style="font-family:ui-monospace,monospace;font-size:12px;color:${c.mac_ethernet?'var(--txt)':'#5f5f68'}">
+        ${esc(c.mac_ethernet || 'não cadastrado')}</td>
+    <td style="color:var(--mut);font-size:12px">${esc(c.ultimo_ip||'—')}</td>
+    <td style="color:var(--mut);font-size:12px">${pct!==null ? pct+'%<div class="est-sub">'+gb(c.storage_livre)+' livre</div>' : '—'}</td>
+    <td><span class="stat ${on?'on':'off'}"><span class="dot ${on?'on':'off'}"></span>${on?'Online':'Offline'}</span>
+        <div class="est-sub">${esc(c.player_version||'—')}</div></td>
+    <td style="color:var(--mut);font-size:12px;max-width:180px">${c.observacao ? esc(c.observacao) : '<span style="color:#4a4a52">—</span>'}</td>
+    <td style="white-space:nowrap">
+      <button class="mini" onclick='editarInventario("${c.id}","${nomeEsc}")'>✎ Editar</button>
+    </td>
+  </tr>`;
+}
+
+// mesma lógica da Visão Geral: filtra sobre o que já está em memória, sem
+// refetch, pra busca funcionar digitando em frotas grandes sem travar.
+function filtrarBuscaDispositivos(v){
+  DV_BUSCA = v;
+  const termo = DV_BUSCA.trim().toLowerCase();
+  const termoNum = termo.replace(/\D/g,'');
+  const lista = !termo ? DV_CHS : DV_CHS.filter(c=>{
+    const hotel = (c.accounts && c.accounts.nome || '').toLowerCase();
+    const cnpj  = (c.accounts && c.accounts.cnpj || '').replace(/\D/g,'');
+    const canal = (c.nome||'').toLowerCase();
+    const cod   = (c.codigo_curto||'').toLowerCase();
+    const wifi  = (c.mac_wifi||'').toLowerCase();
+    const eth   = (c.mac_ethernet||'').toLowerCase();
+    return hotel.includes(termo) || canal.includes(termo) || cod.includes(termo)
+        || wifi.includes(termo) || eth.includes(termo)
+        || (termoNum && cnpj.includes(termoNum));
+  });
+
+  const bodyEl = document.getElementById('dvBody');
+  if(!bodyEl) return;
+  bodyEl.innerHTML = lista.length
+    ? lista.map(linhaDispositivo).join('')
+    : `<tr><td colspan="9"><div class="empty"><b>Nenhum resultado para "${esc(DV_BUSCA)}"</b></div></td></tr>`;
+}
+
 const VIEWS = {
   /* ===== ADMIN ===== */
 
@@ -1489,36 +1545,11 @@ const VIEWS = {
     }
 
     const lista = chs||[];
+    DV_CHS = lista;
     const semWifi = lista.filter(c=> !c.mac_wifi).length;
     const semEth  = lista.filter(c=> !c.mac_ethernet).length;
 
-    const linhas = lista.map(c=>{
-      const on = c.last_seen_at && (Date.now()-new Date(c.last_seen_at).getTime() < 5*60*1000);
-      const hotel = c.accounts ? c.accounts.nome : '—';
-      const cnpj  = c.accounts && c.accounts.cnpj ? c.accounts.cnpj : '';
-      const pct = (c.storage_total && c.storage_livre != null)
-        ? Math.round(100*(c.storage_total-c.storage_livre)/c.storage_total) : null;
-      const gb = n => n==null ? '—' : (n/1073741824).toFixed(1)+' GB';
-      const nomeEsc = String(c.nome||'').replace(/"/g,'&quot;');
-      return `<tr class="row">
-        <td><div class="est-name">${esc(hotel)}</div>
-            <div class="est-sub">${esc(cnpj||'sem CNPJ')}</div></td>
-        <td><div class="est-name" style="font-size:13px">${esc(c.nome||'—')}</div>
-            <div class="est-sub">código ${esc(c.codigo_curto||'—')}</div></td>
-        <td style="font-family:ui-monospace,monospace;font-size:12px;color:${c.mac_wifi?'var(--txt)':'#5f5f68'}">
-            ${esc(c.mac_wifi || 'não cadastrado')}</td>
-        <td style="font-family:ui-monospace,monospace;font-size:12px;color:${c.mac_ethernet?'var(--txt)':'#5f5f68'}">
-            ${esc(c.mac_ethernet || 'não cadastrado')}</td>
-        <td style="color:var(--mut);font-size:12px">${esc(c.ultimo_ip||'—')}</td>
-        <td style="color:var(--mut);font-size:12px">${pct!==null ? pct+'%<div class="est-sub">'+gb(c.storage_livre)+' livre</div>' : '—'}</td>
-        <td><span class="stat ${on?'on':'off'}"><span class="dot ${on?'on':'off'}"></span>${on?'Online':'Offline'}</span>
-            <div class="est-sub">${esc(c.player_version||'—')}</div></td>
-        <td style="color:var(--mut);font-size:12px;max-width:180px">${c.observacao ? esc(c.observacao) : '<span style="color:#4a4a52">—</span>'}</td>
-        <td style="white-space:nowrap">
-          <button class="mini" onclick='editarInventario("${c.id}","${nomeEsc}")'>✎ Editar</button>
-        </td>
-      </tr>`;
-    }).join('');
+    const linhas = lista.map(linhaDispositivo).join('');
 
     const resumoMac = (semWifi? ' · '+semWifi+' sem MAC Wi-Fi' : ' · todos com MAC Wi-Fi')
                      + (semEth ? ' · '+semEth +' sem MAC Ethernet' : ' · todos com MAC Ethernet');
@@ -1528,12 +1559,18 @@ const VIEWS = {
       + `<div class="panel">
            <div class="panel-h"><h3>Inventário da frota</h3>
              <span class="hint">MAC é identificador fixo do aparelho; o IP muda</span></div>
+           <div style="padding:14px 20px 14px">
+             <input id="dvBusca" type="text" placeholder="Buscar por hotel, canal, código ou MAC…"
+               value="${escA(DV_BUSCA)}" oninput="filtrarBuscaDispositivos(this.value)"
+               style="width:100%;max-width:360px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);
+                      color:var(--txt);padding:9px 12px;font-size:13px;font-family:inherit">
+           </div>
            <table>
              <thead><tr>
                <th>Hotel</th><th>Canal</th><th>MAC Wi-Fi</th><th>MAC Ethernet</th><th>IP local</th>
                <th>Disco</th><th>Status</th><th>Observação</th><th></th>
              </tr></thead>
-             <tbody>${linhas || '<tr><td colspan="9"><div class="empty"><b>Nenhum box cadastrado</b>Crie uma estação em Estações &amp; Canais.</div></td></tr>'}</tbody>
+             <tbody id="dvBody">${linhas || '<tr><td colspan="9"><div class="empty"><b>Nenhum box cadastrado</b>Crie uma estação em Estações &amp; Canais.</div></td></tr>'}</tbody>
            </table>
          </div>`;
   },
