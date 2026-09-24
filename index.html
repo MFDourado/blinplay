@@ -226,12 +226,40 @@
   .pseq b{color:var(--gold)}
   .chip{font-size:10.5px;padding:3px 8px;border-radius:6px;border:1px solid var(--line);color:var(--mut)}
   .chip.camp{border-color:rgba(245,168,0,.4);color:var(--gold)}
+  .est-tabs{display:flex;gap:8px;padding:0 20px 14px;flex-wrap:wrap}
+  .est-tab{background:var(--surf2);border:1px solid var(--line);color:var(--mut);border-radius:999px;
+    padding:7px 14px;font-size:12.5px;font-weight:600;display:inline-flex;align-items:center;gap:7px;transition:.13s}
+  .est-tab:hover{border-color:var(--gold);color:var(--txt)}
+  .est-tab.active{background:var(--gold-soft);border-color:rgba(245,168,0,.4);color:var(--gold)}
+  .est-tab .n{background:rgba(255,255,255,.08);border-radius:999px;padding:1px 7px;font-size:11px;color:var(--txt)}
+  .est-tab.active .n{background:rgba(245,168,0,.22);color:var(--gold)}
+
+  /* ---------- menu mobile (hambúrguer) ---------- */
+  .mobile-topbar{display:none;position:sticky;top:0;z-index:1500;align-items:center;gap:12px;
+    padding:12px 16px;background:linear-gradient(180deg,var(--bg2),var(--bg));border-bottom:1px solid var(--line)}
+  .mobile-topbar .logo{padding:0}
+  .mobile-topbar .logo b{font-size:17px}
+  .mobile-topbar .sym-img{height:24px}
+  .hamburguer{display:flex;flex-direction:column;justify-content:center;gap:4px;width:34px;height:34px;
+    background:var(--surf2);border:1px solid var(--line);border-radius:8px;padding:0;flex-shrink:0}
+  .hamburguer span{display:block;height:2px;width:16px;margin:0 auto;background:var(--txt);border-radius:2px}
+  .fechar-menu-mobile{display:none;position:absolute;top:14px;right:14px;width:30px;height:30px;
+    background:var(--surf2);border:1px solid var(--line);border-radius:8px;color:var(--mut);font-size:15px}
+  .nav-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:2000}
 
   @media(max-width:820px){
-    #app.show{grid-template-columns:1fr}
-    .side{position:static;height:auto;flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px}
-    .side .logo{padding:6px}.role-pill,.nav-sec,.side-foot{display:none}
-    .nav{width:auto}.kpis{grid-template-columns:repeat(2,1fr)}
+    #app.show{display:block}
+    .mobile-topbar{display:flex}
+    .side{position:fixed;top:0;left:0;height:100vh;width:270px;max-width:82vw;
+      transform:translateX(-100%);transition:transform .22s ease;z-index:2001;
+      flex-direction:column;align-items:stretch;gap:4px;overflow-y:auto;box-shadow:20px 0 40px -10px rgba(0,0,0,.6)}
+    .side.mobile-open{transform:translateX(0)}
+    .side > .logo{display:flex}
+    .fechar-menu-mobile{display:flex}
+    .nav-backdrop.show{display:block}
+    .nav{width:100%}
+    .main{padding-top:74px}
+    .kpis{grid-template-columns:repeat(2,1fr)}
     table{font-size:12px}th,td{padding:10px 12px}
   }
 
@@ -349,12 +377,21 @@
 
 <!-- ============ APP ============ -->
 <section id="app">
-  <aside class="side">
+  <div id="mobileTopbar" class="mobile-topbar">
+    <button id="btnHamburguer" class="hamburguer" onclick="toggleMenuMobile()" aria-label="Abrir menu">
+      <span></span><span></span><span></span>
+    </button>
+    <span class="logo"><img class="sym-img" src="img/blinplay-favicon.png" alt=""><b>BlinPlay</b></span>
+  </div>
+  <div id="navBackdrop" class="nav-backdrop" onclick="fecharMenuMobile()"></div>
+  <aside class="side" id="sideNav">
+    <button id="btnFecharMenu" class="fechar-menu-mobile" onclick="fecharMenuMobile()" aria-label="Fechar menu">✕</button>
     <span class="logo"><img class="sym-img" src="img/blinplay-favicon.png" alt=""><b>BlinPlay</b></span>
     <span id="rolePill" class="role-pill"></span>
     <div id="navList"></div>
     <div style="padding:10px 16px 4px;color:#4a4a52;font-size:10.5px;font-family:ui-monospace,monospace">painel <span id="painelVersao">—</span></div>
     <div class="side-foot">
+      <button class="logout" id="btnAtualizar" onclick="atualizarPainel()" style="margin-bottom:6px"><span class="ic">⟳</span> Atualizar</button>
       <button class="logout" onclick="logout()"><span class="ic">↩</span> Sair</button>
     </div>
   </aside>
@@ -443,9 +480,11 @@ const NAV = {
     {k:'clientes', ic:'◈', label:'Clientes'},
     {k:'prog',     ic:'☰', label:'Programação dos Canais'},
     {k:'camp',     ic:'◷', label:'Campanhas & Agenda'},
+    {k:'widgets',  ic:'⊞', label:'Widgets'},
     {sec:'GESTÃO'},
     {k:'contas',   ic:'⬡', label:'Contas / Hotéis'},
     {k:'usuarios', ic:'◉', label:'Usuários & Acessos'},
+    {k:'relatorios', ic:'▥', label:'Relatórios'},
   ],
   cli:[
     {sec:'MEU CANAL'},
@@ -454,9 +493,700 @@ const NAV = {
     {k:'prog',     ic:'☰', label:'Montar Programação'},
     {k:'cli_camp', ic:'◷', label:'Minhas Campanhas'},
     {k:'cli_canais',ic:'▤',label:'Meus Canais'},
+    {k:'cli_relatorio',ic:'▥',label:'Meu Relatório'},
   ]
 };
+let EST_CHS = [], EST_NPL = {}, EST_FILTRO = 'todos';
+let CLI_OV_CHS = [], CLI_OV_FILTRO = null;
+let WG_ACCS = [];
+let REL_ACCS = [];
+let REL_ULTIMO = null; // último relatório gerado, guardado pra exportar sem recalcular
+const WIDGET_DEFS = [
+  {tipo:'hora',       nome:'Hora certa',            desc:'Relógio em tempo real, sem depender de nada externo.'},
+  {tipo:'data',       nome:'Data / dia da semana',  desc:'Data atual por extenso, sem depender de nada externo.'},
+  {tipo:'frase',      nome:'Frase motivacional',    desc:'Frase do dia, de um banco próprio — sem depender de nada externo.'},
+  {tipo:'clima',      nome:'Previsão do tempo',     desc:'Clima da cidade cadastrada abaixo (fonte gratuita e estável).'},
+  {tipo:'cotacao',    nome:'Cotação de moeda',      desc:'Dólar e euro, atualizados automaticamente (fonte gratuita e estável).'},
+  {tipo:'loteria',    nome:'Resultado de loteria',  desc:'Últimos resultados (Mega-Sena e outras), fonte pública.'},
+  {tipo:'brasileirao',nome:'Campeonato Brasileiro', desc:'Tabela e últimos jogos.'},
+];
+
+function cliOverviewTabsHtml(){
+  const total = CLI_OV_CHS.length;
+  const nOn = CLI_OV_CHS.filter(c=>estaOnline(c.last_seen_at)).length;
+  const nOff = total - nOn;
+  const tab=(chave,label,n)=>
+    `<button class="est-tab ${CLI_OV_FILTRO===chave?'active':''}" onclick="filtrarCliOverview(${chave===null?'null':"'"+chave+"'"})">${label} <span class="n">${n}</span></button>`;
+  return tab(null,'Todas',total)+tab('online','Online',nOn)+tab('offline','Offline',nOff);
+}
+
+function linhasCliOverview(nomePorConta){
+  let list = CLI_OV_CHS;
+  if(CLI_OV_FILTRO==='online') list = list.filter(c=>estaOnline(c.last_seen_at));
+  else if(CLI_OV_FILTRO==='offline') list = list.filter(c=>!estaOnline(c.last_seen_at));
+
+  if(!CLI_OV_CHS.length){
+    return '<tr><td colspan="4"><div class="empty"><b>Nenhum canal ainda</b>A Blincast instala e configura seus canais.</div></td></tr>';
+  }
+  if(!list.length){
+    return `<tr><td colspan="4"><div class="empty"><b>Nenhum canal ${CLI_OV_FILTRO==='online'?'online':'offline'} agora</b></div></td></tr>`;
+  }
+  return list.map(c=>{
+    const online=estaOnline(c.last_seen_at);
+    const visto=c.last_seen_at?tempoRel(c.last_seen_at):'nunca';
+    return `<tr class="row">
+      <td><div class="est-name">${esc(nomePorConta[c.account_id]||'—')}</div><div class="est-sub">Canal: ${esc(c.nome)}</div></td>
+      <td><span class="stat ${online?'on':'off'}"><span class="dot ${online?'on':'off'}"></span>${online?'Online':'Offline'}</span></td>
+      <td style="color:var(--mut)">${visto}</td>
+      <td style="color:var(--mut)">${esc(c.player_version||'—')}</td>
+    </tr>`;
+  }).join('');
+}
+
+function filtrarCliOverview(v){
+  CLI_OV_FILTRO = v;
+  const tabsEl = document.getElementById('cliOvTabs');
+  const bodyEl = document.getElementById('cliOvBody');
+  const nomePorConta = {};
+  CLI_ACCS.forEach(a=> nomePorConta[a.id]=a.nome);
+  if(tabsEl) tabsEl.innerHTML = cliOverviewTabsHtml();
+  if(bodyEl) bodyEl.innerHTML = linhasCliOverview(nomePorConta);
+}
+
+/* ---- Busca com sugestão pra escolher conta/hotel (Widgets e Relatórios) ----
+   Lista TODOS de cara, clicável, e digitar só filtra a mesma lista — sem
+   caixa flutuante (que ficava cortada pelo overflow:hidden do painel). */
+function listaContasHtml(prefixo, lista, termo){
+  const t = (termo||'').trim().toLowerCase();
+  const filtradas = t ? lista.filter(a=> (a.nome||'').toLowerCase().includes(t)) : lista;
+  if(!filtradas.length) return '<div style="padding:10px 14px;color:var(--mut);font-size:12.5px">Nenhum hotel encontrado</div>';
+  return filtradas.map(a=>
+    `<div onclick='selecionarContaSugestao("${prefixo}","${a.id}","${escJ(a.nome)}")'
+       style="padding:9px 14px;cursor:pointer;font-size:13px;color:var(--txt);border-bottom:1px solid var(--line)"
+       onmouseover="this.style.background='var(--surf2)'" onmouseout="this.style.background='transparent'">
+       ${esc(a.nome)}
+     </div>`
+  ).join('');
+}
+// dois estados pro seletor de conta: "buscando" (campo + lista) e
+// "selecionado" (chip verde + botão pra trocar) — clicar num nome troca
+// de um estado pro outro, em vez de deixar tudo visível ao mesmo tempo.
+function contaAreaBuscaHtml(prefixo, lista){
+  return `<input type="text" id="${prefixo}Busca" placeholder="Digite pra filtrar…" autocomplete="off"
+      oninput="buscarContaSugestao('${prefixo}', this.value)"
+      style="width:100%;height:38px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:0 12px;font-size:13px;box-sizing:border-box;margin-bottom:8px">
+    <input type="hidden" id="${prefixo}ContaSel">
+    <div id="${prefixo}Sugestoes" style="max-height:240px;overflow-y:auto;border:1px solid var(--line);border-radius:8px">${listaContasHtml(prefixo, lista, '')}</div>`;
+}
+function contaAreaSelecionadaHtml(prefixo, id, nome){
+  return `<div style="display:flex;align-items:center;gap:9px;height:38px;padding:0 12px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);box-sizing:border-box">
+      <span style="color:#3ddc84;font-size:15px;line-height:1">●</span>
+      <b style="font-size:13px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(nome)}</b>
+      <button type="button" class="mini" onclick="trocarConta('${prefixo}')">Trocar</button>
+    </div>
+    <input type="hidden" id="${prefixo}ContaSel" value="${escA(id)}">`;
+}
+function buscarContaSugestao(prefixo, termo){
+  const lista = prefixo==='wg' ? WG_ACCS : REL_ACCS;
+  const box = document.getElementById(prefixo+'Sugestoes');
+  if(box) box.innerHTML = listaContasHtml(prefixo, lista, termo);
+}
+function selecionarContaSugestao(prefixo, id, nome){
+  const area = document.getElementById(prefixo+'ContaArea');
+  if(area) area.innerHTML = contaAreaSelecionadaHtml(prefixo, id, nome);
+  if(prefixo==='wg') abrirWidgetsConta(id);
+}
+function trocarConta(prefixo){
+  const lista = prefixo==='wg' ? WG_ACCS : REL_ACCS;
+  const area = document.getElementById(prefixo+'ContaArea');
+  if(area) area.innerHTML = contaAreaBuscaHtml(prefixo, lista);
+  if(prefixo==='wg'){ const p=document.getElementById('wgPainelConta'); if(p) p.innerHTML=''; }
+}
+
+/* ---- Widgets: conteúdo pronto por conta ---- */
+async function abrirWidgetsConta(accountId){
+  const painel = document.getElementById('wgPainelConta');
+  if(!accountId){ painel.innerHTML=''; return; }
+  painel.innerHTML = '<div class="panel"><div class="loading">Carregando…</div></div>';
+
+  const [{ data: existentes }, { data: chs }] = await Promise.all([
+    sb.from('account_widgets').select('id,tipo,ativo,duracao_seg,a_cada,config').eq('account_id', accountId),
+    sb.from('channels').select('id,nome').eq('account_id', accountId).eq('ativo', true).order('nome'),
+  ]);
+  const porTipo = {};
+  (existentes||[]).forEach(w=> porTipo[w.tipo]=w);
+
+  let canaisPorWidget = {};
+  if(existentes && existentes.length){
+    const ids = existentes.map(w=>w.id);
+    const { data: links } = await sb.from('account_widget_channels').select('widget_id,channel_id').in('widget_id', ids);
+    (links||[]).forEach(l=> (canaisPorWidget[l.widget_id] ||= []).push(l.channel_id));
+  }
+
+  painel.innerHTML = `<div class="panel"><div class="panel-h"><h3>Widgets</h3><span class="hint">${(chs||[]).length} canal(is) nesta conta</span></div>
+    <div style="padding:8px 20px 20px;display:flex;flex-direction:column;gap:14px">
+      ${WIDGET_DEFS.map(def => cardWidgetHtml(def, accountId, porTipo[def.tipo], chs||[], porTipo[def.tipo]?canaisPorWidget[porTipo[def.tipo].id]:[])).join('')}
+    </div></div>`;
+}
+
+function cardWidgetHtml(def, accountId, existente, canais, canaisSelecionados){
+  const ativo = existente ? existente.ativo : false;
+  const dur = existente ? existente.duracao_seg : 8;
+  const cada = existente ? existente.a_cada : 5;
+  const cfg = existente ? (existente.config||{}) : {};
+  const selecionados = new Set(canaisSelecionados||[]);
+
+  const camposExtra = def.tipo==='clima' ? `
+    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+      <input id="wg_clima_cidade" placeholder="Cidade" value="${escA(cfg.cidade||'')}"
+        style="flex:1;min-width:140px;background:#0c0c10;border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px 10px;font-size:12.5px">
+      <input id="wg_clima_uf" placeholder="UF" maxlength="2" value="${escA(cfg.uf||'')}"
+        style="width:60px;background:#0c0c10;border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px 10px;font-size:12.5px;text-transform:uppercase">
+      <button class="mini" type="button" onclick='buscarCidadeCNPJ("${accountId}")'>Buscar pelo CNPJ</button>
+    </div>
+    <div id="wg_clima_msg" style="font-size:11.5px;color:var(--mut);margin-top:4px"></div>` : '';
+
+  const avisoRisco = def.tipo==='brasileirao'
+    ? `<div style="font-size:11px;color:var(--gold);margin-top:4px">Fonte não-oficial — se sair do ar, esse item some da rotação sozinho, sem travar a programação.</div>`
+    : '';
+
+  const canaisHtml = canais.length ? canais.map(c=>
+      `<label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--mut);margin:3px 10px 3px 0">
+        <input type="checkbox" name="wg_${def.tipo}_canal" value="${c.id}" ${selecionados.has(c.id)?'checked':''}> ${esc(c.nome)}
+      </label>`).join('')
+    : '<span style="font-size:12px;color:var(--mut)">Sem canais cadastrados nesta conta</span>';
+
+  return `<div style="border:1px solid var(--line);border-radius:12px;padding:16px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+      <div>
+        <label style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px">
+          <input type="checkbox" id="wg_${def.tipo}_ativo" ${ativo?'checked':''}> ${def.nome}
+        </label>
+        <div style="font-size:12px;color:var(--mut);margin-top:2px">${def.desc}</div>
+        ${avisoRisco}
+      </div>
+      <button class="mini" type="button" onclick='salvarWidget("${accountId}","${def.tipo}")'>Salvar</button>
+    </div>
+    <div style="display:flex;gap:16px;margin-top:10px;flex-wrap:wrap">
+      <label style="font-size:12px;color:var(--mut)">Segundos na tela
+        <input id="wg_${def.tipo}_dur" type="number" min="3" max="60" value="${dur}"
+          style="display:block;width:80px;margin-top:4px;background:#0c0c10;border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:6px 8px;font-size:12.5px"></label>
+      <label style="font-size:12px;color:var(--mut)">Aparece a cada quantos itens
+        <input id="wg_${def.tipo}_cada" type="number" min="1" max="50" value="${cada}"
+          style="display:block;width:80px;margin-top:4px;background:#0c0c10;border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:6px 8px;font-size:12.5px"></label>
+    </div>
+    ${camposExtra}
+    <div style="margin-top:10px">
+      <div style="font-size:11.5px;color:var(--mut);margin-bottom:5px">Rodar nos canais (nenhum marcado = todos):</div>
+      ${canaisHtml}
+    </div>
+    <div id="wg_${def.tipo}_msg" class="fmsg" style="margin-top:6px"></div>
+  </div>`;
+}
+
+/* ---- Relatórios: dias online/offline + mídias, admin e cliente ---- */
+const REL_COLUNAS_OPCIONAIS = [
+  { key:'mac_wifi', label:'MAC Wi-Fi' },
+  { key:'mac_ethernet', label:'MAC Ethernet' },
+  { key:'ultimo_ip', label:'Último IP' },
+  { key:'player_version', label:'Versão' },
+  { key:'last_seen_at', label:'Último acesso' },
+];
+let REL_COLS_VISIVEIS = { cnpj:true, mac_wifi:true, mac_ethernet:true, ultimo_ip:true, player_version:true, last_seen_at:true };
+
+async function gerarRelatorio(accountIdFixo){
+  const sel = document.getElementById('relContaSel');
+  const accountId = accountIdFixo || (sel ? sel.value : '');
+  const inicio = document.getElementById('relInicio').value;
+  const fim = document.getElementById('relFim').value;
+  const area = document.getElementById('relResultado');
+
+  if(!accountId){ alert('Selecione uma conta/unidade.'); return; }
+  if(!inicio || !fim){ alert('Preencha as duas datas.'); return; }
+  if(inicio > fim){ alert('A data inicial não pode ser depois da final.'); return; }
+
+  area.innerHTML = '<div class="panel"><div class="loading">Gerando…</div></div>';
+
+  try{
+    const [{ data: canais, error: e1 }, { data: midias, error: e2 }, { data: conta, error: e3 }, { data: mensal, error: e4 }] = await Promise.all([
+      sb.rpc('relatorio_canais', { p_account_id: accountId, p_inicio: inicio, p_fim: fim }),
+      sb.rpc('relatorio_midias', { p_account_id: accountId, p_inicio: inicio, p_fim: fim }),
+      sb.from('accounts').select('nome,cnpj').eq('id', accountId).single(),
+      sb.rpc('relatorio_mensal', { p_account_id: accountId, p_inicio: inicio, p_fim: fim }),
+    ]);
+    if(e1) throw e1;
+    if(e2) throw e2;
+    if(e3) throw e3;
+    if(e4) throw e4;
+
+    REL_ULTIMO = {
+      accountId, inicio, fim, canais: canais||[], midias: midias||[], mensal: mensal||[],
+      contaNome: (conta&&conta.nome)||'', contaCnpj: (conta&&conta.cnpj)||'',
+    };
+    // sempre reabre com tudo visível — decisão de ocultar não fica "presa"
+    // de um relatório anterior sem a pessoa perceber
+    REL_COLS_VISIVEIS = { cnpj:true, mac_wifi:true, mac_ethernet:true, ultimo_ip:true, player_version:true, last_seen_at:true };
+
+    area.innerHTML = montarPainelRelatorio();
+  }catch(e){
+    area.innerHTML = `<div class="panel"><div class="empty"><b>Erro ao gerar relatório</b>${esc((e&&e.message)||String(e))}</div></div>`;
+  }
+}
+
+// gráfico de colunas EMPILHADAS (vertical), em SVG puro — cada canal é uma
+// coluna, cada "parte" empilha dentro dela (ex: online embaixo, offline em
+// cima). Mesma técnica em toda parte: funciona igual na tela e no PDF.
+// gráfico de colunas AGRUPADAS (lado a lado), com o número em cima de
+// cada barra — usado pro "dias online x offline por mês"
+function graficoColunasAgrupadasSvg(grupos, larguraTotal, alturaTotal, corRotulo, corValor, corEixo){
+  larguraTotal = larguraTotal || 520; alturaTotal = alturaTotal || 220;
+  corRotulo = corRotulo || '#a8abb4'; corValor = corValor || '#fff';
+  corEixo = corEixo || 'rgba(255,255,255,.08)';
+  const margemBaixo = 40, margemTopo = 22;
+  const alturaUtil = alturaTotal - margemBaixo - margemTopo;
+  const maxValor = Math.max(1, ...grupos.flatMap(g=>g.valores.map(v=>v.valor)));
+  const n = grupos.length || 1;
+  const larguraGrupo = larguraTotal / n;
+  const larguraBarra = Math.min(24, larguraGrupo * 0.28);
+  const gapBarras = 4;
+
+  let svg = `<svg viewBox="0 0 ${larguraTotal} ${alturaTotal}" width="100%" style="max-width:${larguraTotal}px;height:auto;display:block">`;
+  for(let g=1; g<=3; g++){
+    const gy = margemTopo + alturaUtil - (alturaUtil*g/3);
+    svg += `<line x1="0" y1="${gy}" x2="${larguraTotal}" y2="${gy}" stroke="${corEixo}" stroke-width="1"></line>`;
+  }
+  grupos.forEach((grupo,i)=>{
+    const centro = larguraGrupo*i + larguraGrupo/2;
+    const larguraJunto = larguraBarra*grupo.valores.length + gapBarras*(grupo.valores.length-1);
+    let x = centro - larguraJunto/2;
+    grupo.valores.forEach(v=>{
+      const h = (v.valor/maxValor) * alturaUtil;
+      const y = margemTopo + alturaUtil - h;
+      if(h>0){
+        svg += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${larguraBarra}" height="${h.toFixed(1)}" rx="3" fill="${v.cor}"></rect>`;
+        svg += `<text x="${(x+larguraBarra/2).toFixed(1)}" y="${(y-5).toFixed(1)}" text-anchor="middle" font-size="10.5" font-weight="700" font-family="Arial,sans-serif" fill="${corValor}">${v.valor}</text>`;
+      }
+      x += larguraBarra + gapBarras;
+    });
+    const totalGrupo = grupo.valores.reduce((s,v)=>s+v.valor,0);
+    svg += `<text x="${centro.toFixed(1)}" y="${alturaTotal-20}" text-anchor="middle" font-size="10.5" font-family="Arial,sans-serif" fill="${corRotulo}">${esc(grupo.label)}</text>`;
+    svg += `<text x="${centro.toFixed(1)}" y="${alturaTotal-6}" text-anchor="middle" font-size="10.5" font-family="Arial,sans-serif" fill="${corRotulo}">Total: ${totalGrupo}</text>`;
+  });
+  svg += `</svg>`;
+  return svg;
+}
+
+// gráfico de rosca (donut) em SVG puro — cada fatia é um trecho tracejado
+// de um círculo (stroke-dasharray), mais simples que desenhar arco por arco
+function graficoDonutSvg(dados, tamanho, corTextoCentro, corRotuloLegenda){
+  tamanho = tamanho || 190;
+  corTextoCentro = corTextoCentro || '#222';
+  corRotuloLegenda = corRotuloLegenda || '#8a8d96';
+  const total = dados.reduce((s,d)=>s+d.valor,0);
+  const raio = tamanho/2 - 16, centro = tamanho/2;
+  const circ = 2*Math.PI*raio;
+  let acumulado = 0, arcos = '';
+  if(total>0){
+    dados.forEach(d=>{
+      if(d.valor<=0) return;
+      const fracao = d.valor/total;
+      const comprimento = Math.max(0.6, fracao*circ - 2); // -2 = respiro entre fatias
+      const offset = -acumulado*circ;
+      arcos += `<circle cx="${centro}" cy="${centro}" r="${raio}" fill="none" stroke="${d.cor}" stroke-width="24"
+        stroke-dasharray="${comprimento} ${circ-comprimento}" stroke-dashoffset="${offset}"
+        stroke-linecap="round" transform="rotate(-90 ${centro} ${centro})"></circle>`;
+      acumulado += fracao;
+    });
+  } else {
+    arcos = `<circle cx="${centro}" cy="${centro}" r="${raio}" fill="none" stroke="#3a3a42" stroke-width="24"></circle>`;
+  }
+  return `<svg viewBox="0 0 ${tamanho} ${tamanho}" width="${tamanho}" height="${tamanho}">
+      ${arcos}
+      <text x="${centro}" y="${centro-2}" text-anchor="middle" font-size="26" font-weight="800" font-family="Arial,sans-serif" fill="${corTextoCentro}">${total}</text>
+      <text x="${centro}" y="${centro+17}" text-anchor="middle" font-size="10.5" font-family="Arial,sans-serif" fill="${corRotuloLegenda}">total</text>
+    </svg>`;
+}
+
+// "Jul 26", "Ago 26"... — lista fixa em vez de Intl/toLocaleDateString,
+// porque o formato automático de data pt-BR varia por navegador (em teste,
+// um deles devolveu "Jul de 26" em vez de "Jul 26")
+function labelMes(dataStr){
+  const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const d = new Date(dataStr+'T00:00:00');
+  return MESES[d.getMonth()]+' '+String(d.getFullYear()).slice(-2);
+}
+
+function legendaGrafico(dados, corTexto, corValor, semNumero){
+  return `<div style="display:flex;flex-direction:column;gap:8px">
+    ${dados.map(d=>`<span style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:${corTexto}">
+      <span style="width:11px;height:11px;border-radius:3px;background:${d.cor};display:inline-block;flex-shrink:0"></span>${esc(d.label)}${semNumero?'':` — <b style="color:${corValor}">${d.valor}</b>`}
+    </span>`).join('')}
+  </div>`;
+}
+
+// painel mini (cartão) reaproveitado dentro do dashboard — mesmo visual da
+// classe .panel, só que aninhado, então usa estilo inline pra não colidir
+function cartaoDashboard(titulo, conteudo){
+  return `<div style="flex:1;min-width:280px;border:1px solid var(--line);border-radius:var(--r);padding:18px;background:linear-gradient(180deg,var(--surf),var(--bg2))">
+    <div style="font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px">${titulo}</div>
+    ${conteudo}
+  </div>`;
+}
+
+function montarDashboardRelatorio(){
+  const { midias, mensal } = REL_ULTIMO;
+  const img = (midias||[]).find(m=>m.tipo==='image') || {total_agora:0};
+  const vid = (midias||[]).find(m=>m.tipo==='video')  || {total_agora:0};
+
+  const dadosMidias = [
+    { label:'Imagens', valor: img.total_agora, cor:'#F5C518' },
+    { label:'Vídeos',  valor: vid.total_agora, cor:'#5aa9ff' },
+  ];
+  const cartaoMidias = cartaoDashboard('Mídias por tipo',
+    `<div style="display:flex;align-items:center;gap:22px;flex-wrap:wrap">
+      ${graficoDonutSvg(dadosMidias, 170, '#fff', '#a8abb4')}
+      ${legendaGrafico(dadosMidias, '#a8abb4', '#fff')}
+    </div>`);
+
+  const gruposMensal = (mensal||[]).map(m=> ({
+    label: labelMes(m.mes_ord),
+    valores: [
+      { valor: m.dias_online, cor:'#34d399' },
+      { valor: m.dias_offline, cor:'#f4606b' },
+    ],
+  }));
+  const totalOnlineMensal = (mensal||[]).reduce((s,m)=>s+m.dias_online,0);
+  const totalOfflineMensal = (mensal||[]).reduce((s,m)=>s+m.dias_offline,0);
+  const totalDiasHtml = `<div style="font-size:12.5px;color:#a8abb4;margin:-6px 0 14px">
+      Total no período: <b style="color:#34d399">${totalOnlineMensal} online</b> · <b style="color:#f4606b">${totalOfflineMensal} offline</b>
+    </div>`;
+  const cartaoDias = cartaoDashboard('Dias online x offline por mês',
+    gruposMensal.length
+      ? totalDiasHtml + `<div style="display:flex;gap:20px;align-items:flex-end;flex-wrap:wrap">
+          ${graficoColunasAgrupadasSvg(gruposMensal, 380, 210, '#a8abb4', '#fff')}
+          ${legendaGrafico([{label:'Online',cor:'#34d399'},{label:'Offline',cor:'#f4606b'}], '#a8abb4', '#fff', true)}
+        </div>`
+      : '<div class="empty"><b>Sem dados nesse período</b></div>');
+
+  return `<div style="padding:8px 20px 20px;display:flex;gap:18px;flex-wrap:wrap">
+    ${cartaoMidias}
+    ${cartaoDias}
+  </div>`;
+}
+
+// separado do gerarRelatorio() pra poder ser chamado de novo (sem bater no
+// banco) só pra redesenhar quando a pessoa marca/desmarca uma coluna
+function montarPainelRelatorio(){
+  const { inicio, fim, canais, midias, contaNome, contaCnpj } = REL_ULTIMO;
+  const img = (midias||[]).find(m=>m.tipo==='image') || {total_agora:0, total_periodo:0};
+  const vid = (midias||[]).find(m=>m.tipo==='video')  || {total_agora:0, total_periodo:0};
+  const colunasAtivas = REL_COLUNAS_OPCIONAIS.filter(c=>REL_COLS_VISIVEIS[c.key]);
+
+  const checkboxesHtml = `
+    <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--mut);margin-right:16px">
+      <input type="checkbox" ${REL_COLS_VISIVEIS.cnpj?'checked':''} onchange="alternarColunaRelatorio('cnpj', this.checked)"> CNPJ
+    </label>
+    ${REL_COLUNAS_OPCIONAIS.map(c=>
+      `<label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--mut);margin-right:16px">
+        <input type="checkbox" ${REL_COLS_VISIVEIS[c.key]?'checked':''} onchange="alternarColunaRelatorio('${c.key}', this.checked)"> ${c.label}
+      </label>`
+    ).join('')}`;
+
+  const formatarValor = (chave, valor)=>{
+    if(chave==='last_seen_at') return valor ? esc(new Date(valor).toLocaleString('pt-BR')) : '—';
+    return valor ? esc(valor) : '—';
+  };
+
+  const linhasCanais = (canais&&canais.length) ? canais.map(c=>{
+    const extras = colunasAtivas.map(cc=> `<td>${formatarValor(cc.key, c[cc.key])}</td>`).join('');
+    return `<tr><td>${esc(c.canal)}</td>${extras}<td>${c.dias_online}</td><td>${c.dias_total-c.dias_online}</td><td>${c.dias_total}</td></tr>`;
+  }).join('') : `<tr><td colspan="${4+colunasAtivas.length}"><div class="empty"><b>Sem dados nesse período</b></div></td></tr>`;
+
+  const cnpjLinha = (REL_COLS_VISIVEIS.cnpj && contaCnpj) ? `<div style="color:var(--mut);font-size:12.5px;margin-top:2px">CNPJ: ${esc(contaCnpj)}</div>` : '';
+
+  return `<div class="panel"><div class="panel-h"><div><h3>${esc(contaNome||'')}</h3>${cnpjLinha}</div><span class="hint">${esc(inicio)} a ${esc(fim)}</span></div>
+    <div style="padding:16px 20px;display:flex;gap:24px;flex-wrap:wrap">
+      <div class="kpi"><div class="lab">Imagens ativas no momento</div><div class="val">${img.total_agora}</div></div>
+      <div class="kpi"><div class="lab">Vídeos ativos no momento</div><div class="val">${vid.total_agora}</div></div>
+      <div class="kpi"><div class="lab">Imagens inseridas no período</div><div class="val">${img.total_periodo}</div></div>
+      <div class="kpi"><div class="lab">Vídeos inseridos no período</div><div class="val">${vid.total_periodo}</div></div>
+    </div>
+    ${montarDashboardRelatorio()}
+    <div style="padding:0 20px 16px">
+      <div style="font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Mostrar na tabela (tela e exportações)</div>
+      ${checkboxesHtml}
+    </div>
+    <table><thead><tr><th>Canal</th>${colunasAtivas.map(c=>`<th>${c.label}</th>`).join('')}<th>Dias online</th><th>Dias offline</th><th>Dias no período</th></tr></thead>
+      <tbody>${linhasCanais}</tbody></table>
+    <div style="padding:16px 20px;display:flex;gap:8px">
+      <button class="ghost" onclick="exportarRelatorioCSV()">⬇ Exportar CSV</button>
+      <button class="ghost" onclick="exportarRelatorioPDF()">⬇ Exportar PDF (com gráficos)</button>
+    </div></div>`;
+}
+
+function alternarColunaRelatorio(chave, valor){
+  REL_COLS_VISIVEIS[chave] = valor;
+  const area = document.getElementById('relResultado');
+  if(area) area.innerHTML = montarPainelRelatorio();
+}
+
+async function pedirRefreshMassa(){
+  if(!confirm('Isso manda AGORA o pedido de recarregamento pra TODOS os boxes ativos, de uma vez.\n\nContinuar?')) return;
+  const msg = document.getElementById('refreshMassaMsg');
+  msg.className='fmsg'; msg.textContent='Enviando…';
+  try{
+    const { data, error } = await sb.rpc('pedir_refresh_massa');
+    if(error) throw error;
+    msg.className='fmsg ok'; msg.textContent='Pedido enviado pra '+data+' box(es).';
+  }catch(e){ msg.className='fmsg err'; msg.textContent='Erro: '+((e&&e.message)||e); }
+}
+
+function csvSeguro(v){
+  // mesma proteção contra fórmula de Excel já usada na exportação de
+  // Dispositivos — reaproveitada aqui, não é uma regra nova.
+  const t = String(v==null?'':v);
+  return /^[=+\-@\t\r]/.test(t) ? "'"+t : t;
+}
+
+function exportarRelatorioCSV(){
+  if(!REL_ULTIMO){ alert('Gere o relatório primeiro.'); return; }
+  const { inicio, fim, canais, midias, contaNome, contaCnpj } = REL_ULTIMO;
+  const colunasAtivas = REL_COLUNAS_OPCIONAIS.filter(c=>REL_COLS_VISIVEIS[c.key]);
+
+  const linhas = [];
+  linhas.push(['Conta', contaNome||'']);
+  if(REL_COLS_VISIVEIS.cnpj && contaCnpj) linhas.push(['CNPJ', contaCnpj]);
+  linhas.push(['Período', inicio+' a '+fim]);
+  linhas.push([]);
+  linhas.push(['Canal', ...colunasAtivas.map(c=>c.label), 'Dias online','Dias offline','Dias no período']);
+  canais.forEach(c=>{
+    const extras = colunasAtivas.map(cc=>{
+      let v = c[cc.key];
+      if(cc.key==='last_seen_at') v = v ? new Date(v).toLocaleString('pt-BR') : '';
+      return v||'';
+    });
+    linhas.push([c.canal, ...extras, c.dias_online, c.dias_total-c.dias_online, c.dias_total]);
+  });
+  linhas.push([]);
+  linhas.push(['Mídias por tipo', 'Ativas no momento', 'Inseridas no período']);
+  midias.forEach(m=> linhas.push([m.tipo, m.total_agora, m.total_periodo]));
+
+  const csv = linhas
+    .map(l=> l.map(v=> '"'+csvSeguro(v).replace(/"/g,'""')+'"').join(';'))
+    .join('\r\n');
+  const blob = new Blob(['\ufeff'+csv], { type:'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'relatorio-blinplay-'+inicio+'-a-'+fim+'.csv';
+  a.click();
+  const href = a.href;
+  setTimeout(()=> URL.revokeObjectURL(href), 0);
+}
+
+function exportarRelatorioPDF(){
+  if(!REL_ULTIMO){ alert('Gere o relatório primeiro.'); return; }
+  const { inicio, fim, canais, midias, mensal, contaNome, contaCnpj } = REL_ULTIMO;
+  const img = midias.find(m=>m.tipo==='image') || {total_agora:0, total_periodo:0};
+  const vid = midias.find(m=>m.tipo==='video')  || {total_agora:0, total_periodo:0};
+  const colunasAtivas = REL_COLUNAS_OPCIONAIS.filter(c=>REL_COLS_VISIVEIS[c.key]);
+
+  const linhas = canais.map(c=>{
+    const extras = colunasAtivas.map(cc=>{
+      let v = c[cc.key];
+      if(cc.key==='last_seen_at') v = v ? new Date(v).toLocaleString('pt-BR') : '';
+      return `<td>${esc(v||'—')}</td>`;
+    }).join('');
+    return `<tr><td>${esc(c.canal)}</td>${extras}<td>${c.dias_online}</td><td>${c.dias_total-c.dias_online}</td><td>${c.dias_total}</td></tr>`;
+  }).join('');
+
+  // mesmas funções de gráfico usadas na tela — cor fixa (hex), não
+  // depende do var(--xxx) do painel, então funciona igual aqui fora.
+  // Aqui é fundo branco (impressão), então texto escuro — o padrão da função.
+  const dadosMidiasPdf = [
+    { label:'Imagens', valor: img.total_agora, cor:'#F5C518' },
+    { label:'Vídeos',  valor: vid.total_agora, cor:'#5aa9ff' },
+  ];
+  const graficoMidiasPdf = graficoDonutSvg(dadosMidiasPdf, 170, '#222', '#555');
+  const legendaMidiasPdf = legendaGrafico(dadosMidiasPdf, '#555', '#222');
+  const gruposMensalPdf = (mensal||[]).map(m=> ({
+    label: labelMes(m.mes_ord),
+    valores: [
+      { valor: m.dias_online, cor:'#34d399' },
+      { valor: m.dias_offline, cor:'#f4606b' },
+    ],
+  }));
+  const graficoDiasPdf = gruposMensalPdf.length ? graficoColunasAgrupadasSvg(gruposMensalPdf, 480, 220, '#555', '#222', '#e5e5e5') : '';
+  const legendaDiasPdf = legendaGrafico([{label:'Online',cor:'#34d399'},{label:'Offline',cor:'#f4606b'}], '#555', '#222', true);
+  const totalOnlinePdf = (mensal||[]).reduce((s,m)=>s+m.dias_online,0);
+  const totalOfflinePdf = (mensal||[]).reduce((s,m)=>s+m.dias_offline,0);
+
+  // PDF via impressão do navegador: zero biblioteca nova, funciona em
+  // qualquer computador — a pessoa escolhe "Salvar como PDF" na impressora.
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Relatório BlinPlay</title>
+    <style>
+      body{font-family:Arial,sans-serif;color:#111;padding:30px}
+      h1{font-size:20px;margin-bottom:4px}
+      h2{font-size:14.5px;margin:24px 0 10px;color:#333}
+      .sub{color:#555;font-size:13px;margin-bottom:20px}
+      table{width:100%;border-collapse:collapse;margin-top:10px}
+      th,td{border:1px solid #ccc;padding:8px 10px;font-size:13px;text-align:left}
+      th{background:#f2f2f2}
+      .kpis{display:flex;gap:24px;margin:14px 0}
+      .kpi b{font-size:20px;display:block}
+      .grafico-linha{display:flex;align-items:center;gap:24px;flex-wrap:wrap}
+    </style></head><body>
+    <h1>Relatório BlinPlay — ${esc(contaNome||'')}</h1>
+    ${(REL_COLS_VISIVEIS.cnpj && contaCnpj) ? `<div class="sub">CNPJ: ${esc(contaCnpj)}</div>` : ''}
+    <div class="sub">Período: ${esc(inicio)} a ${esc(fim)}</div>
+    <div class="kpis">
+      <div class="kpi">Imagens ativas no momento<b>${img.total_agora}</b></div>
+      <div class="kpi">Vídeos ativos no momento<b>${vid.total_agora}</b></div>
+      <div class="kpi">Imagens inseridas no período<b>${img.total_periodo}</b></div>
+      <div class="kpi">Vídeos inseridos no período<b>${vid.total_periodo}</b></div>
+    </div>
+    <h2>Mídias ativas no momento</h2>
+    <div class="grafico-linha">${graficoMidiasPdf}${legendaMidiasPdf}</div>
+    <h2>Dias online x offline por mês</h2>
+    ${gruposMensalPdf.length ? `<div class="sub" style="margin-bottom:8px">Total no período: <b>${totalOnlinePdf} online</b> · <b>${totalOfflinePdf} offline</b></div>` : ''}
+    <div class="grafico-linha">${graficoDiasPdf}${legendaDiasPdf}</div>
+    <h2>Detalhamento por canal</h2>
+    <table><thead><tr><th>Canal</th>${colunasAtivas.map(c=>`<th>${c.label}</th>`).join('')}<th>Dias online</th><th>Dias offline</th><th>Dias no período</th></tr></thead>
+      <tbody>${linhas}</tbody></table>
+    <script>window.onload = function(){ window.print(); };<\/script>
+    </body></html>`;
+
+  const win = window.open('', '_blank');
+  if(!win){ alert('O navegador bloqueou a nova aba. Permita pop-ups pra esse site e tente de novo.'); return; }
+  win.document.write(html);
+  win.document.close();
+}
+
+async function buscarCidadeCNPJ(accountId){
+  const el = document.getElementById('wg_clima_msg');
+  const conta = WG_ACCS.find(a=>a.id===accountId);
+  const soNum = String(conta && conta.cnpj || '').replace(/\D/g,'');
+  if(soNum.length !== 14){ el.textContent = 'CNPJ da conta inválido/ausente — preencha manualmente.'; return; }
+  el.textContent = 'Consultando…';
+  try{
+    const r = await fetch('https://brasilapi.com.br/api/cnpj/v1/'+soNum);
+    if(!r.ok) throw new Error('não encontrado');
+    const j = await r.json();
+    document.getElementById('wg_clima_cidade').value = j.municipio || '';
+    document.getElementById('wg_clima_uf').value = j.uf || '';
+    el.textContent = j.municipio ? ('Preenchido: '+j.municipio+'/'+(j.uf||'')) : 'Não veio cidade — preencha manualmente.';
+  }catch(e){ el.textContent = 'Não encontrado na Receita — preencha manualmente.'; }
+}
+
+async function salvarWidget(accountId, tipo){
+  const ativo = document.getElementById('wg_'+tipo+'_ativo').checked;
+  const dur = parseInt(document.getElementById('wg_'+tipo+'_dur').value, 10) || 8;
+  const cada = parseInt(document.getElementById('wg_'+tipo+'_cada').value, 10) || 5;
+  const msg = document.getElementById('wg_'+tipo+'_msg');
+  msg.className = 'fmsg'; msg.textContent = 'Salvando…';
+
+  let config = {};
+  if(tipo==='clima'){
+    config = {
+      cidade: (document.getElementById('wg_clima_cidade').value||'').trim(),
+      uf: (document.getElementById('wg_clima_uf').value||'').trim(),
+    };
+  }
+
+  const canaisEl = document.querySelectorAll('input[name="wg_'+tipo+'_canal"]:checked');
+  const canaisSel = Array.from(canaisEl).map(el=>el.value);
+
+  try{
+    const { data: up, error } = await sb.from('account_widgets')
+      .upsert({ account_id:accountId, tipo, ativo, duracao_seg:dur, a_cada:cada, config }, { onConflict:'account_id,tipo' })
+      .select('id').single();
+    if(error) throw error;
+    const widgetId = up.id;
+
+    await sb.from('account_widget_channels').delete().eq('widget_id', widgetId);
+    if(canaisSel.length){
+      const { error: e2 } = await sb.from('account_widget_channels')
+        .insert(canaisSel.map(cid=>({ widget_id:widgetId, channel_id:cid })));
+      if(e2) throw e2;
+    }
+    msg.className = 'fmsg ok'; msg.textContent = 'Salvo!';
+  }catch(e){
+    msg.className = 'fmsg err'; msg.textContent = 'Erro: '+((e&&e.message)||e);
+  }
+}
 let ROLE='admin', CUR='overview';
+
+function canalOnline(c){
+  return estaOnline(c.last_seen_at);
+}
+
+function estTabsHtml(){
+  const total = EST_CHS.length;
+  const nOn = EST_CHS.filter(canalOnline).length;
+  const nOff = total - nOn;
+  const tab=(chave,label,n)=> `<button class="est-tab ${EST_FILTRO===chave?'active':''}" onclick="filtrarEstacoes('${chave}')">${label} <span class="n">${n}</span></button>`;
+  return tab('todos','Todas',total)+tab('online','Online',nOn)+tab('offline','Offline',nOff);
+}
+
+function linhasEstacoes(){
+  let list = EST_CHS;
+  if(EST_FILTRO==='online') list = list.filter(canalOnline);
+  else if(EST_FILTRO==='offline') list = list.filter(c=>!canalOnline(c));
+
+  if(!EST_CHS.length){
+    return '<tr><td colspan="7"><div class="empty"><b>Nenhuma estação ainda</b>Cadastre uma conta primeiro, depois adicione os canais (boxes) dela.</div></td></tr>';
+  }
+  if(!list.length){
+    const rotulo = EST_FILTRO==='online' ? 'online' : 'offline';
+    return `<tr><td colspan="7"><div class="empty"><b>Nenhum box ${rotulo} agora</b></div></td></tr>`;
+  }
+  return list.map(c=>{
+    const online = canalOnline(c);
+    const visto = c.last_seen_at ? tempoRel(c.last_seen_at) : 'nunca';
+    const url = location.origin+location.pathname.replace(/index\.html$/,'')+'player.html?token='+c.device_token;
+    const cod = c.codigo_curto||'—';
+    const criado = c.created_at ? new Date(c.created_at).toLocaleDateString('pt-BR') : '—';
+    const nProg = EST_NPL[c.id] || 0;
+    return `<tr class="row" style="${c.ativo?'':'opacity:.5'}">
+      <td><div class="est-name">${esc(c.accounts?c.accounts.nome:'—')}</div><div class="est-sub">Canal: ${esc(c.nome)}</div></td>
+      <td><span class="stat ${online?'on':'off'}"><span class="dot ${online?'on':'off'}"></span>${online?'Online':'Offline'}</span></td>
+      <td>
+        <span id="codSpan-${c.id}" data-cod="${escA(cod)}" style="font-family:monospace;font-size:18px;letter-spacing:2px;color:var(--gold,#F5A800);font-weight:700">••••••</span>
+        <button class="mini" onclick="alternarCodigoVisivel('${c.id}', this)">Mostrar</button>
+      </td>
+      <td style="color:var(--mut)">${criado}</td>
+      <td style="color:var(--mut)">${visto}</td>
+      <td style="color:var(--mut)">${esc(c.player_version||'—')}
+          <div class="est-sub">${nProg? nProg+' na programação' : 'sem programação'}${c.ativo?'':' · INATIVO'}</div></td>
+      <td style="white-space:nowrap">
+        <button class="mini" onclick="copiarCodigo('${cod}')">⧉ Código</button>
+        <button class="mini" onclick="copiarURL('${escJ(url)}')">⧉ URL</button>
+        <button class="mini" onclick='renomearCanal("${c.id}","${escA(c.nome)}")'>✎ Renomear</button>
+        <button class="mini" onclick='alternarCanal("${c.id}","${escA(c.nome)}",${c.ativo?'false':'true'})'>${c.ativo?'⊘ Inativar':'✓ Reativar'}</button>
+        <button class="mini danger" onclick='excluirCanal("${c.id}","${escA(c.nome)}",${EST_NPL[c.id]||0})'>🗑</button>
+      </td></tr>`;
+  }).join('');
+}
+
+function alternarCodigoVisivel(id, btn){
+  const span = document.getElementById('codSpan-'+id);
+  if(!span) return;
+  const oculto = span.textContent.trim() === '••••••';
+  if(oculto){
+    span.textContent = span.dataset.cod;
+    if(btn) btn.textContent = 'Ocultar';
+  } else {
+    span.textContent = '••••••';
+    if(btn) btn.textContent = 'Mostrar';
+  }
+}
+
+function filtrarEstacoes(chave){
+  EST_FILTRO = chave;
+  const tabs = document.getElementById('estTabs');
+  const body = document.getElementById('estBody');
+  if(tabs) tabs.innerHTML = estTabsHtml();
+  if(body) body.innerHTML = linhasEstacoes();
+}
 let PROG_CH = null;   // canal aberto no editor de programação
 
 /* Tela "Clientes": lista + busca à esquerda, biblioteca filtrada à direita.
@@ -481,7 +1211,7 @@ function enter(role){
   } else {
     const nomeConta = CLI_ACC && CLI_ACC.nome ? CLI_ACC.nome : 'Cliente';
     const cnpjConta = CLI_ACC && CLI_ACC.cnpj ? CLI_ACC.cnpj : '';
-    pill.innerHTML = '● '+nomeConta + (cnpjConta?` <span class="pill-cnpj">${cnpjConta}</span>`:'');
+    pill.innerHTML = '● '+esc(nomeConta) + (cnpjConta?` <span class="pill-cnpj">${esc(cnpjConta)}</span>`:'');
   }
   buildNav(); render();
 }
@@ -612,10 +1342,44 @@ async function entrarAposConvite(userId){
    indefensável, e o dia em que uma policy for afrouxada vira brecha real.
    Removido. toggleDemo fica como no-op para não quebrar chamada residual. */
 function toggleDemo(){ /* removido */ }
+// Botão "Atualizar": existe porque deixar o painel aberto por muito tempo
+// numa aba em segundo plano faz o navegador atrasar a renovação automática
+// do token de sessão, e ele expira de verdade nos bastidores. Um F5 nesse
+// estado manda pra tela de login, mesmo a sessão ainda sendo renovável.
+// Aqui, antes de recarregar os dados da tela atual, tentamos renovar a
+// sessão explicitamente (o token de renovação dura muito mais que o de
+// acesso) — só cai pro login se a sessão estiver mesmo perdida de vez.
+function toggleMenuMobile(){
+  const side = document.getElementById('sideNav');
+  const bg = document.getElementById('navBackdrop');
+  const abrindo = !side.classList.contains('mobile-open');
+  side.classList.toggle('mobile-open', abrindo);
+  bg.classList.toggle('show', abrindo);
+}
+function fecharMenuMobile(){
+  document.getElementById('sideNav').classList.remove('mobile-open');
+  document.getElementById('navBackdrop').classList.remove('show');
+}
+
+async function atualizarPainel(){
+  const btn = document.getElementById('btnAtualizar');
+  if(btn){ btn.disabled = true; btn.style.opacity = '.6'; }
+  try{
+    const { data, error } = await sb.auth.refreshSession();
+    if(error || !data || !data.session){
+      await logout();
+      return;
+    }
+  }catch(e){ /* sem rede momentânea: tenta atualizar os dados mesmo assim */ }
+  try{ await render(); }
+  finally{ if(btn){ btn.disabled = false; btn.style.opacity = '1'; } }
+}
+
 async function logout(){
   try{ if(sb) await sb.auth.signOut(); }catch(e){}
   CLI_ACC=null; CLI_ACCS=[]; PROG_CH=null;
   MIDIA_CLI_SEL=null; MIDIA_CLI_BUSCA=''; MIDIA_CLI_ACCS=null; MIDIA_CLI_CONT={}; MIDIA_CLI_TOTAL=0;
+  CLI_OV_CHS=[]; CLI_OV_FILTRO=null;
   document.getElementById('app').classList.remove('show');
   document.getElementById('login').classList.remove('hidden');
   document.getElementById('pass').value='';
@@ -630,20 +1394,28 @@ function buildNav(){
     if(item.sec){ const s=document.createElement('div');s.className='nav-sec';s.textContent=item.sec;el.appendChild(s);return;}
     const b=document.createElement('button'); b.className='nav'+(item.k===CUR?' active':'');
     b.innerHTML=`<span class="ic">${item.ic}</span> ${item.label}`;
-    b.onclick=()=>{CUR=item.k;PROG_CH=null;buildNav();render();}; el.appendChild(b);
+    b.onclick=()=>{CUR=item.k;PROG_CH=null;buildNav();render();fecharMenuMobile();}; el.appendChild(b);
   });
-  // gerente de rede: botão pra trocar de hotel
+  // gerente de rede: botão pra trocar de hotel + visão geral de todas as unidades
   if(ROLE==='cli' && CLI_ACCS.length>1){
     const sec=document.createElement('div');sec.className='nav-sec';sec.textContent='REDE';el.appendChild(sec);
+    const v=document.createElement('button'); v.className='nav'+(CUR==='cli_overview'?' active':'');
+    v.innerHTML=`<span class="ic">▦</span> Visão Geral da Rede`;
+    v.onclick=()=>{CUR='cli_overview';buildNav();render();fecharMenuMobile();}; el.appendChild(v);
     const t=document.createElement('button');t.className='nav';
     t.innerHTML=`<span class="ic">⇄</span> Trocar de hotel`;
-    t.onclick=trocarHotel; el.appendChild(t);
+    t.onclick=()=>{fecharMenuMobile();trocarHotel();}; el.appendChild(t);
   }
 }
 
 /* ---------------- VIEWS ---------------- */
 let RENDER_TOKEN = 0;
 async function render(){
+  // fecha qualquer modal (e o timer dele, tipo o de "Ver tela") que
+  // tenha ficado aberto de uma navegação anterior — sem isso, sair de
+  // "Ver tela" clicando direto num item do menu deixava aquele timer
+  // rodando pra sempre em segundo plano, acumulando lentidão com o uso.
+  fecharModal();
   const view=document.getElementById('view');
   const fn=VIEWS[CUR]||(()=>'<p>—</p>');
   /* M6 — dois cliques rápidos na navegação disputavam: quem terminasse a
@@ -660,7 +1432,7 @@ async function render(){
     // pra digitar não fazer o campo de texto perder o foco a cada letra
     if(alvo==='clientes') renderListaClientes(MIDIA_CLI_BUSCA);
   }
-  catch(e){ view.innerHTML='<div class="note" style="background:rgba(244,96,107,.1);border-color:rgba(244,96,107,.3);color:#ffb3ba">Erro ao carregar: '+(e.message||e)+'</div>'; }
+  catch(e){ view.innerHTML='<div class="note" style="background:rgba(244,96,107,.1);border-color:rgba(244,96,107,.3);color:#ffb3ba">Erro ao carregar: '+esc(e.message||e)+'</div>'; }
 }
 
 function topbar(title,sub,actions=''){return `<div class="top"><div><h1>${title}</h1><div class="sub">${sub}</div></div><div class="top-actions">${actions}</div></div>`;}
@@ -682,8 +1454,8 @@ let COLS_EXTRAS = null;   // null = ainda não sabemos
 
 async function buscarCanaisOverview(){
   const COMPLETO = 'id,nome,last_seen_at,player_version,account_id,rustdesk_id,'
-                 + 'tags,autorizado,ultimo_ip,storage_livre,storage_total,accounts(nome)';
-  const BASICO   = 'id,nome,last_seen_at,player_version,account_id,storage_livre,accounts(nome)';
+                 + 'tags,autorizado,ultimo_ip,storage_livre,storage_total,accounts(nome,cnpj)';
+  const BASICO   = 'id,nome,last_seen_at,player_version,account_id,storage_livre,accounts(nome,cnpj)';
 
   if(COLS_EXTRAS !== false){
     const r = await sb.from('channels').select(COMPLETO).eq('ativo',true).order('created_at');
@@ -778,39 +1550,27 @@ const VIEWS = {
     const online=chs.filter(c=>estaOnline(c.last_seen_at)).length;
     const campsAtivas=camps.filter(c=>c.ativo && hoje>=c.data_inicio && hoje<=c.data_fim);
 
-    // tabela de canais com status
+    OV_CHS = chs; // guarda pra busca/filtro local, sem bater no banco de novo
+
+    // tabela de canais: linhas + abas de status calculadas pela mesma lógica
+    // usada nas atualizações locais (busca, tag, status), pra não duplicar
     let chRows;
     if(chs.length===0){
       chRows='<tr><td colspan="5"><div class="empty"><b>Nenhum canal ainda</b>Cadastre uma conta e seus canais para começar.</div></td></tr>';
     } else {
-      const chsFiltrados = FILTRO_TAG ? chs.filter(c=> (c.tags||[]).includes(FILTRO_TAG)) : chs;
-      chRows=chsFiltrados.map(c=>{
-        const on=estaOnline(c.last_seen_at);
-        const visto=c.last_seen_at?tempoRel(c.last_seen_at):'nunca';
-        const tags=(c.tags||[]);
-        const tagsHtml = tags.length
-          ? tags.map(t=>'<span style="background:#1e1e24;color:var(--mut);font-size:10.5px;padding:2px 7px;border-radius:12px;margin-right:4px">'+t+'</span>').join('')
-          : '<span style="color:#4a4a52;font-size:11px">sem tags</span>';
-        const pend = (c.autorizado === false);
-        return `<tr class="row">
-          <td><div class="est-name">${esc(c.accounts?c.accounts.nome:'—')}${pend?' <span style="background:#332a10;color:#F5C518;font-size:10px;padding:2px 7px;border-radius:12px;vertical-align:middle">aguardando liberação</span>':''}</div>
-              <div class="est-sub">Canal: ${esc(c.nome)}${c.ultimo_ip?' · '+esc(c.ultimo_ip):''}</div>
-              <div style="margin-top:4px">${tagsHtml}</div></td>
-          <td><span class="stat ${on?'on':'off'}"><span class="dot ${on?'on':'off'}"></span>${on?'Online':'Offline'}</span></td>
-          <td style="color:var(--mut)">${visto}</td>
-          <td style="color:var(--mut)">${esc(c.player_version||'—')}</td>
-          <td style="white-space:nowrap">
-            <button class="mini" onclick="verTela('${c.id}','${escJ(c.nome)}')">◱ Ver tela</button>
-            ${COLS_EXTRAS===false ? '' : `<button class="mini" onclick="acessoRemoto('${c.id}','${escJ(c.nome)}')" title="${c.rustdesk_id?'RustDesk '+escA(c.rustdesk_id):'RustDesk não configurado'}">⧉ Remoto</button>`}
-            <button class="mini" onclick="pedirRefresh('${c.id}','${escJ(c.nome)}')">⟳ Atualizar tela</button>
-            ${COLS_EXTRAS===false ? '' : `<button class="mini" onclick='editarTags("${c.id}","${escA(c.nome)}",${escA(JSON.stringify(tags))})'>⌗ Tags</button>`}
-            ${COLS_EXTRAS===false ? '' : pend
-              ? `<button class="mini" style="background:#332a10;border-color:#4a3d1c;color:#F5C518" onclick='autorizar("${c.id}",true,"${escA(c.nome)}")'>✓ Autorizar</button>`
-              : `<button class="mini" onclick='autorizar("${c.id}",false,"${escA(c.nome)}")' title="revogar autorização">⊘</button>`}
-          </td>
-        </tr>`;
-      }).join('');
+      const porTag = FILTRO_TAG ? chs.filter(c=> (c.tags||[]).includes(FILTRO_TAG)) : chs;
+      let chsFiltrados = porTag;
+      if(FILTRO_STATUS==='online') chsFiltrados = porTag.filter(c=>estaOnline(c.last_seen_at));
+      else if(FILTRO_STATUS==='offline') chsFiltrados = porTag.filter(c=>!estaOnline(c.last_seen_at));
+      chRows = chsFiltrados.length ? chsFiltrados.map(linhaOverview).join('')
+        : `<tr><td colspan="5"><div class="empty"><b>Nenhum canal ${FILTRO_STATUS==='online'?'online':'offline'} agora</b></div></td></tr>`;
     }
+    const porTagCount = FILTRO_TAG ? chs.filter(c=> (c.tags||[]).includes(FILTRO_TAG)) : chs;
+    const nOnTag = porTagCount.filter(c=>estaOnline(c.last_seen_at)).length;
+    const nOffTag = porTagCount.length - nOnTag;
+    const statusTab=(chave,label,n)=>
+      `<button class="est-tab ${FILTRO_STATUS===chave?'active':''}" onclick="filtrarStatus(${chave===null?'null':"'"+chave+"'"})">${label} <span class="n">${n}</span></button>`;
+    const statusTabsHtml = statusTab(null,'Todas',porTagCount.length) + statusTab('online','Online',nOnTag) + statusTab('offline','Offline',nOffTag);
 
     // campanhas no ar
     let campHtml='';
@@ -835,50 +1595,45 @@ const VIEWS = {
       </div>
       ${chipsTags(chs)}
       <div class="panel"><div class="panel-h"><h3>Canais</h3><span class="hint">online = visto nos últimos 5 min</span></div>
-        <table><thead><tr><th>Hotel / Canal</th><th>Status</th><th>Último acesso</th><th>Versão</th><th></th></tr></thead><tbody>${chRows}</tbody></table></div>`
+        <div style="padding:14px 20px 14px">
+          <input id="ovBusca" type="text" placeholder="Buscar por nome do hotel ou CNPJ…"
+            value="${escA(FILTRO_BUSCA)}" oninput="filtrarBusca(this.value)"
+            style="width:100%;max-width:360px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);
+                   color:var(--txt);padding:9px 12px;font-size:13px;font-family:inherit">
+        </div>
+        <div class="est-tabs" id="ovTabs">${statusTabsHtml}</div>
+        <table><thead><tr><th>Hotel / Canal</th><th>Status</th><th>Último acesso</th><th>Versão</th><th></th></tr></thead><tbody id="ovBody">${chRows}</tbody></table></div>`
     + campHtml;
   },
   async estacoes(){
     const [{ data: chs, error }, { data: pl }] = await Promise.all([
       sb.from('channels')
-        .select('id,nome,descricao,device_token,codigo_curto,ativo,last_seen_at,player_version,account_id,accounts(nome,cnpj)')
+        .select('id,nome,descricao,device_token,codigo_curto,ativo,last_seen_at,player_version,account_id,created_at,accounts(nome,cnpj)')
         .order('created_at',{ascending:true}),
-      sb.from('playlist_items').select('channel_id')
+      sb.from('playlist_items').select('channel_id'),
     ]);
     if(error) throw error;
     // quantos itens de programação cada canal tem: é o que decide se
     // excluir é seguro, porque programação e histórico dependem do canal
     const nPl = {};
     (pl||[]).forEach(i=> nPl[i.channel_id] = (nPl[i.channel_id]||0) + 1);
-    let rows;
-    if(!chs || chs.length===0){
-      rows='<tr><td colspan="6"><div class="empty"><b>Nenhuma estação ainda</b>Cadastre uma conta primeiro, depois adicione os canais (boxes) dela.</div></td></tr>';
-    } else {
-      rows=chs.map(c=>{
-        const online = c.last_seen_at && (Date.now()-new Date(c.last_seen_at).getTime() < 5*60*1000);
-        const visto = c.last_seen_at ? tempoRel(c.last_seen_at) : 'nunca';
-        const url = location.origin+location.pathname.replace(/index\.html$/,'')+'player.html?token='+c.device_token;
-        const cod = c.codigo_curto||'—';
-        const nProg = nPl[c.id] || 0;
-        return `<tr class="row" style="${c.ativo?'':'opacity:.5'}">
-          <td><div class="est-name">${esc(c.accounts?c.accounts.nome:'—')}</div><div class="est-sub">Canal: ${esc(c.nome)}</div></td>
-          <td><span class="stat ${online?'on':'off'}"><span class="dot ${online?'on':'off'}"></span>${online?'Online':'Offline'}</span></td>
-          <td><span style="font-family:monospace;font-size:18px;letter-spacing:2px;color:var(--gold,#F5A800);font-weight:700">${esc(cod)}</span></td>
-          <td style="color:var(--mut)">${visto}</td>
-          <td style="color:var(--mut)">${esc(c.player_version||'—')}
-              <div class="est-sub">${nProg? nProg+' na programação' : 'sem programação'}${c.ativo?'':' · INATIVO'}</div></td>
-          <td style="white-space:nowrap">
-            <button class="mini" onclick="copiarCodigo('${cod}')">⧉ Código</button>
-            <button class="mini" onclick="copiarURL('${escJ(url)}')">⧉ URL</button>
-            <button class="mini" onclick='renomearCanal("${c.id}","${escA(c.nome)}")'>✎ Renomear</button>
-            <button class="mini" onclick='alternarCanal("${c.id}","${escA(c.nome)}",${c.ativo?'false':'true'})'>${c.ativo?'⊘ Inativar':'✓ Reativar'}</button>
-            <button class="mini danger" onclick='excluirCanal("${c.id}","${escA(c.nome)}",${nPl[c.id]||0})'>🗑</button>
-          </td></tr>`;
-      }).join('');
-    }
+    EST_CHS = chs || [];
+    EST_NPL = nPl;
     return topbar('Estações & Canais','1 box = 1 canal. Use o código de 6 dígitos no app BlinPlay do box.', `<button class="solid" onclick="novaEstacao()">＋ Nova estação</button>`)
+    +`<div class="panel"><div class="panel-h"><h3>Atualização automática dos boxes</h3></div>
+        <div style="padding:16px 20px;font-size:12.5px;color:var(--mut)">
+          Nada pra preencher aqui: assim que QUALQUER box reportar uma versão nova (basta 1 estar rodando o player mais recente), os outros com versão mais antiga recarregam sozinhos na próxima sincronização.
+        </div>
+        <div style="padding:0 20px 20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:16px">
+          <button class="ghost" onclick="pedirRefreshMassa()">⚡ Forçar recarregamento AGORA em todos os boxes</button>
+          <span id="refreshMassaMsg" class="fmsg"></span>
+        </div>
+        <div style="padding:0 20px 16px;font-size:11.5px;color:var(--mut)">
+          Não espera a próxima sincronização — manda o pedido pra todos de uma vez, ativos hoje. Use pra urgência; no dia a dia, o mecanismo acima já resolve sozinho.
+        </div></div>`
     +`<div class="panel"><div class="panel-h"><h3>Estações</h3><span class="hint">online = visto nos últimos 5 min</span></div>
-      <table><thead><tr><th>Hotel / Canal</th><th>Status</th><th>Código</th><th>Último acesso</th><th>Versão</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+      <div class="est-tabs" id="estTabs">${estTabsHtml()}</div>
+      <table><thead><tr><th>Hotel / Canal</th><th>Status</th><th>Código</th><th>Criado em</th><th>Último acesso</th><th>Versão</th><th></th></tr></thead><tbody id="estBody">${linhasEstacoes()}</tbody></table></div>`;
   },
   async midia(){
     const { data: meds, error } = await sb.from('media')
@@ -1012,8 +1767,9 @@ const VIEWS = {
           <td style="color:var(--mut)">${esc(a.cnpj)}</td>
           <td><span class="badge ${a.ativo?'live':'done'}">${a.ativo?'Ativa':'Inativa'}</span></td>
           <td><span class="badge ${tipo==='Blincast'?'live':'sched'}">${tipo}</span></td>
-          <td style="color:var(--mut)">${n} canal${n===1?'':'is'}</td>
+          <td style="color:var(--mut)">${n===1 ? '1 canal' : n+' canais'}</td>
           <td style="white-space:nowrap">
+            <button class="mini" onclick='editarConta("${a.id}")'>✎ Editar</button>
             <button class="mini" onclick="CUR='usuarios';buildNav();render()">Usuários</button>
             <button class="mini" onclick='alternarConta("${a.id}","${nomeEsc}",${a.ativo?'false':'true'})'>${a.ativo?'⊘ Inativar':'✓ Reativar'}</button>
             ${n===0
@@ -1173,6 +1929,98 @@ const VIEWS = {
       +`<div class="panel"><div class="panel-h"><h3>Canais</h3><span class="hint">online = visto nos últimos 5 min</span></div>
         <table><thead><tr><th>Canal</th><th>Status</th><th>Último acesso</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
   },
+
+  // gerente de rede: todas as unidades que ele acessa, de uma vez só —
+  // pra saber o que tá online/offline sem precisar entrar unidade por unidade
+  async cli_overview(){
+    if(!CLI_ACCS || CLI_ACCS.length===0) return '';
+    const ids = CLI_ACCS.map(a=>a.id);
+    const { data: chs, error } = await sb.from('channels')
+      .select('id,nome,last_seen_at,player_version,account_id').in('account_id', ids).eq('ativo',true).order('created_at');
+    if(error) throw error;
+    CLI_OV_CHS = chs || [];
+
+    const nomePorConta = {};
+    CLI_ACCS.forEach(a=> nomePorConta[a.id]=a.nome);
+
+    const total = CLI_OV_CHS.length;
+    const online = CLI_OV_CHS.filter(c=>estaOnline(c.last_seen_at)).length;
+
+    return topbar('Visão Geral da Rede', 'Todas as '+CLI_ACCS.length+' unidades que você gerencia · '+new Date().toLocaleDateString('pt-BR'))
+    +`<div class="kpis">
+        <div class="kpi"><div class="lab">Unidades</div><div class="val">${CLI_ACCS.length}</div></div>
+        <div class="kpi"><div class="lab">Canais</div><div class="val">${total}</div></div>
+        <div class="kpi"><div class="lab">Online agora</div><div class="val" style="color:var(--on)">${online}<small>/${total}</small></div></div>
+      </div>
+      <div class="panel"><div class="panel-h"><h3>Canais</h3><span class="hint">online = visto nos últimos 5 min</span></div>
+        <div class="est-tabs" id="cliOvTabs">${cliOverviewTabsHtml()}</div>
+        <table><thead><tr><th>Unidade / Canal</th><th>Status</th><th>Último acesso</th><th>Versão</th></tr></thead>
+          <tbody id="cliOvBody">${linhasCliOverview(nomePorConta)}</tbody></table></div>`;
+  },
+
+  // ADMIN — configuração de widgets (conteúdo pronto: clima, hora, loteria...)
+  // por conta. Não toca em nenhuma tabela/tela existente — é aba nova.
+  async widgets(){
+    const { data: accs } = await sb.from('accounts').select('id,nome,cnpj').eq('ativo',true).order('nome');
+    WG_ACCS = accs || [];
+    return topbar('Widgets','Conteúdo pronto (clima, hora certa, loteria...) pra completar a programação dos seus clientes','')
+      + `<div class="panel"><div class="panel-h"><h3>Escolha a conta</h3></div>
+          <div style="padding:16px 20px;max-width:420px" id="wgContaArea">${contaAreaBuscaHtml('wg', WG_ACCS)}</div></div>
+        <div id="wgPainelConta"></div>`;
+  },
+
+  // ADMIN — relatório de dias online/offline + mídias, por conta e período
+  async relatorios(){
+    const { data: accs } = await sb.from('accounts').select('id,nome').eq('ativo',true).order('nome');
+    REL_ACCS = accs || [];
+    const hoje = new Date().toISOString().slice(0,10);
+    const mesPassado = new Date(Date.now()-29*86400000).toISOString().slice(0,10);
+    return topbar('Relatórios','Dias online/offline e mídias por período, por conta','')
+      + `<div class="panel"><div class="panel-h"><h3>Gerar relatório</h3></div>
+          <div style="padding:16px 20px;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
+            <div style="min-width:240px;max-width:280px">
+              <label style="font-size:12px;color:var(--mut);display:block;margin-bottom:5px">Conta</label>
+              <div id="relContaArea">${contaAreaBuscaHtml('rel', REL_ACCS)}</div>
+            </div>
+            <div><label style="font-size:12px;color:var(--mut);display:block;margin-bottom:5px">De</label>
+              <input id="relInicio" type="date" value="${mesPassado}" style="height:38px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:0 12px;font-size:13px;box-sizing:border-box"></div>
+            <div><label style="font-size:12px;color:var(--mut);display:block;margin-bottom:5px">Até</label>
+              <input id="relFim" type="date" value="${hoje}" style="height:38px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:0 12px;font-size:13px;box-sizing:border-box"></div>
+            <button class="solid" onclick="gerarRelatorio()">Gerar</button>
+          </div></div>
+        <div id="relResultado"></div>`;
+  },
+
+  // CLIENTE — mesma tela, adaptada: 1 unidade = já vem fixo; gerente de
+  // rede (várias unidades) = seletor só com as unidades DELE, nunca de
+  // outros clientes.
+  async cli_relatorio(){
+    if(!CLI_ACCS || CLI_ACCS.length===0) return '';
+    const hoje = new Date().toISOString().slice(0,10);
+    const mesPassado = new Date(Date.now()-29*86400000).toISOString().slice(0,10);
+    const rede = CLI_ACCS.length > 1;
+
+    const seletorConta = rede
+      ? `<div><label style="font-size:12px;color:var(--mut);display:block;margin-bottom:5px">Unidade</label>
+          <select id="relContaSel" style="min-width:220px;height:38px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:0 12px;font-size:13px;font-family:inherit;box-sizing:border-box;-webkit-appearance:none;appearance:none">
+            <option value="">Selecione…</option>
+            ${CLI_ACCS.map(a=>`<option value="${a.id}">${esc(a.nome)}</option>`).join('')}
+          </select></div>`
+      : '';
+    const botao = rede ? `onclick="gerarRelatorio()"` : `onclick="gerarRelatorio('${CLI_ACC.id}')"`;
+
+    return topbar(rede?'Meus Relatórios':(CLI_ACC?CLI_ACC.nome:'Meu Relatório'), rede?'Escolha a unidade e o período':'')
+      + `<div class="panel"><div class="panel-h"><h3>Gerar relatório</h3></div>
+          <div style="padding:16px 20px;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
+            ${seletorConta}
+            <div><label style="font-size:12px;color:var(--mut);display:block;margin-bottom:5px">De</label>
+              <input id="relInicio" type="date" value="${mesPassado}" style="height:38px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:0 12px;font-size:13px;box-sizing:border-box"></div>
+            <div><label style="font-size:12px;color:var(--mut);display:block;margin-bottom:5px">Até</label>
+              <input id="relFim" type="date" value="${hoje}" style="height:38px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:0 12px;font-size:13px;box-sizing:border-box"></div>
+            <button class="solid" ${botao}>Gerar</button>
+          </div></div>
+        <div id="relResultado"></div>`;
+  },
 };
 
 /* ---------------- COMPONENTES ---------------- */
@@ -1181,7 +2029,7 @@ const VIEWS = {
 
 /* ---------------- HELPERS DADOS REAIS ---------------- */
 function tempoRel(ts){
-  const s=Math.floor((Date.now()-new Date(ts).getTime())/1000);
+  const s=Math.max(0, Math.floor((Date.now()-new Date(ts).getTime())/1000));
   if(s<60) return s+' s';
   if(s<3600) return Math.floor(s/60)+' min';
   if(s<86400) return Math.floor(s/3600)+' h';
@@ -1384,9 +2232,88 @@ async function salvarConta(){
   if(soNum.length!==14){ msg.className='fmsg err'; msg.textContent='CNPJ incompleto. Use o formato 00.000.000/0001-00.'; return; }
   msg.className='fmsg'; msg.textContent='Salvando…';
   const { error } = await sb.from('accounts').insert({ nome, cnpj: cnpjNormalizado(cnpj), plano, ativo:true });
-  if(error){ msg.className='fmsg err'; msg.textContent = error.code==='23505' ? 'Já existe uma conta com esse CNPJ.' : ('Erro: '+error.message); return; }
+  if(error){ msg.className='fmsg err'; msg.textContent = 'Erro: '+error.message; return; }
   msg.className='fmsg ok'; msg.textContent='Conta criada!';
   setTimeout(()=>{ fecharModal(); render(); }, 500);
+}
+
+/* ---- Editar conta: dados cadastrais (contato, endereço, anexo) ---- */
+async function editarConta(id){
+  const { data: a, error } = await sb.from('accounts')
+    .select('id,nome,cnpj,plano,contato_nome,endereco,anexo_path,anexo_nome')
+    .eq('id', id).single();
+  if(error || !a){ alert('Não foi possível carregar os dados da conta.'); return; }
+
+  const anexoInfo = a.anexo_path
+    ? `<a href="#" onclick="abrirAnexoConta('${escJ(a.anexo_path)}');return false">${esc(a.anexo_nome||'arquivo anexado')}</a>
+       <button class="mini danger" style="margin-left:8px" onclick="removerAnexoConta('${a.id}')">Remover</button>`
+    : `<span style="color:var(--mut)">Nenhum arquivo anexado</span>`;
+
+  abrirModal(`
+    <h3>Editar cliente</h3>
+    <div class="fsub">Dados cadastrais do hotel/empresa.</div>
+    <div class="fld"><label>Nome do hotel / empresa</label><input id="ec_nome" value="${escA(a.nome||'')}"></div>
+    <div class="fld"><label>CNPJ <span style="color:var(--gold)">*</span></label><input id="ec_cnpj" value="${escA(a.cnpj||'')}" maxlength="18" inputmode="numeric" oninput="mascaraCNPJ(this)"></div>
+    <div class="fld"><label>Nome do contato</label><input id="ec_contato" value="${escA(a.contato_nome||'')}" placeholder="Ex: Maria Silva"></div>
+    <div class="fld"><label>Endereço</label><input id="ec_endereco" value="${escA(a.endereco||'')}" placeholder="Rua, número, bairro, cidade - UF"></div>
+    <div class="fld"><label>Anexo (contrato, comprovante, etc.)</label>
+      <div id="ec_anexo_atual">${anexoInfo}</div>
+      <input id="ec_file" type="file" style="margin-top:8px" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx"></div>
+    <div id="ec_msg" class="fmsg"></div>
+    <div class="form-actions">
+      <button class="fa-cancel" onclick="fecharModal()">Cancelar</button>
+      <button class="fa-save" id="ec_btn" onclick="salvarEdicaoConta('${a.id}')">Salvar</button>
+    </div>`);
+}
+
+async function salvarEdicaoConta(id){
+  const nome=val('ec_nome'), cnpj=val('ec_cnpj'), contato=val('ec_contato'), endereco=val('ec_endereco');
+  const msg=document.getElementById('ec_msg'), btn=document.getElementById('ec_btn');
+  if(!nome){ msg.className='fmsg err'; msg.textContent='Preencha o nome do hotel.'; return; }
+  const soNum = cnpj.replace(/\D/g,'');
+  if(soNum.length!==14){ msg.className='fmsg err'; msg.textContent='CNPJ incompleto. Use o formato 00.000.000/0001-00.'; return; }
+
+  btn.disabled=true; msg.className='fmsg'; msg.textContent='Salvando…';
+
+  const patch = { nome, cnpj: cnpjNormalizado(cnpj), contato_nome: contato||null, endereco: endereco||null };
+
+  const fileEl=document.getElementById('ec_file');
+  const f=fileEl && fileEl.files && fileEl.files[0];
+  if(f){
+    if(f.size > 20*1048576){ msg.className='fmsg err'; msg.textContent='Arquivo acima de 20 MB.'; btn.disabled=false; return; }
+    msg.textContent='Enviando anexo…';
+    // mesma lógica de sanitização de extensão usada no upload de mídia
+    const ext=((f.name.split('.').pop()||'bin').toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,5))||'bin';
+    const path = id+'/'+Date.now()+'_doc.'+ext;
+    const up = await sb.storage.from('blinplay-docs').upload(path, f, { contentType:f.type, upsert:false });
+    if(up.error){ msg.className='fmsg err'; msg.textContent='Falha ao enviar anexo: '+up.error.message; btn.disabled=false; return; }
+    patch.anexo_path = path;
+    patch.anexo_nome = f.name;
+  }
+
+  msg.textContent='Salvando dados…';
+  const { error } = await sb.from('accounts').update(patch).eq('id', id);
+  if(error){
+    msg.className='fmsg err';
+    msg.textContent = 'Erro: '+error.message;
+    btn.disabled=false; return;
+  }
+  msg.className='fmsg ok'; msg.textContent='Salvo!';
+  setTimeout(()=>{ fecharModal(); render(); }, 500);
+}
+
+async function abrirAnexoConta(path){
+  const { data, error } = await sb.storage.from('blinplay-docs').createSignedUrl(path, 300);
+  if(error || !data){ alert('Não foi possível abrir o anexo: '+(error?error.message:'')); return; }
+  window.open(data.signedUrl, '_blank');
+}
+
+async function removerAnexoConta(id){
+  if(!confirm('Remover o anexo desta conta?')) return;
+  const { data:a } = await sb.from('accounts').select('anexo_path').eq('id',id).single();
+  if(a && a.anexo_path){ await sb.storage.from('blinplay-docs').remove([a.anexo_path]); }
+  await sb.from('accounts').update({ anexo_path:null, anexo_nome:null }).eq('id', id);
+  editarConta(id); // reabre o modal já atualizado, sem o anexo
 }
 
 /* ---- Máscara de CNPJ: 00.000.000/0001-00 ---- */
@@ -2120,10 +3047,20 @@ async function verTela(channelId, nomeCanal){
     const w = document.getElementById('snapWrap');
     const i = document.getElementById('snapInfo');
     if(!w || !i) return false;
+    // snap_data e snap_item vêm do box via RPC, autenticado só pelo
+    // device_token — não são digitados por ninguém aqui no painel, mas
+    // cruzam uma fronteira de confiança (dispositivo -> banco -> tela do
+    // admin). Validamos o alfabeto base64 puro antes de usar no src="", e
+    // escapamos snap_item, pra um token vazado ou um box comprometido não
+    // virar execução de script na sessão de quem está vendo o preview.
+    if(!/^[A-Za-z0-9+/=]+$/.test(r.snap_data)){
+      i.textContent = 'Captura inválida recebida do box.';
+      return true;
+    }
     w.innerHTML = '<img src="data:image/jpeg;base64,'+r.snap_data+'" style="width:100%;display:block">';
     let txt = rotulo;
     try{ txt += ' · '+new Date(r.snap_em).toLocaleString('pt-BR'); }catch(e){}
-    if(r.snap_item) txt += '<br>Na tela: '+r.snap_item;
+    if(r.snap_item) txt += '<br>Na tela: '+esc(r.snap_item);
     i.innerHTML = txt;
     return true;
   };
@@ -2244,7 +3181,7 @@ async function exportarDispositivos(){
     const { data } = await sb.from('channels')
       .select('nome,codigo_curto,mac_wifi,mac_ethernet,ultimo_ip,observacao,player_version,last_seen_at,storage_livre,storage_total,accounts(nome,cnpj)')
       .order('created_at');
-    const cab = ['Hotel','CNPJ','Canal','Codigo','MAC Wi-Fi','MAC Ethernet','IP','Versao','Ultimo acesso','Disco livre GB','Disco total GB','Observacao'];
+    const cab = ['Hotel','CNPJ','Canal','Código','MAC Wi-Fi','MAC Ethernet','IP','Versão','Último acesso','Disco livre GB','Disco total GB','Observação'];
     const linhas = (data||[]).map(c=>[
       c.accounts?c.accounts.nome:'', c.accounts?(c.accounts.cnpj||''):'',
       c.nome||'', c.codigo_curto||'', c.mac_wifi||'', c.mac_ethernet||'', c.ultimo_ip||'',
@@ -2280,8 +3217,86 @@ async function exportarDispositivos(){
    autorização evita que um dígito errado no código coloque um box no canal
    de outro hotel — risco real numa migração de frota inteira. */
 let FILTRO_TAG = null;
+let FILTRO_STATUS = null;
+let FILTRO_BUSCA = '';
+let OV_CHS = [];         // guarda os canais já buscados, pra filtrar sem refetch
 
-function chipsTags(canais){
+function filtrarBusca(v){ FILTRO_BUSCA = v; renderOverviewInterativo(); }
+function filtrarStatus(v){ FILTRO_STATUS = v; renderOverviewInterativo(); }
+function filtrarTag(t){ FILTRO_TAG = t; renderOverviewInterativo(); }
+
+// linha da tabela de canais na Visão Geral — extraída pra ser reaproveitada
+// tanto no primeiro render quanto nas atualizações locais de busca/filtro
+function linhaOverview(c){
+  const on=estaOnline(c.last_seen_at);
+  const visto=c.last_seen_at?tempoRel(c.last_seen_at):'nunca';
+  const tags=(c.tags||[]);
+  const tagsHtml = tags.length
+    ? tags.map(t=>'<span style="background:#1e1e24;color:var(--mut);font-size:10.5px;padding:2px 7px;border-radius:12px;margin-right:4px">'+t+'</span>').join('')
+    : '<span style="color:#4a4a52;font-size:11px">sem tags</span>';
+  const pend = (c.autorizado === false);
+  return `<tr class="row">
+    <td><div class="est-name">${esc(c.accounts?c.accounts.nome:'—')}${pend?' <span style="background:#332a10;color:#F5C518;font-size:10px;padding:2px 7px;border-radius:12px;vertical-align:middle">aguardando liberação</span>':''}</div>
+        <div class="est-sub">Canal: ${esc(c.nome)}${c.ultimo_ip?' · '+esc(c.ultimo_ip):''}</div>
+        <div style="margin-top:4px">${tagsHtml}</div></td>
+    <td><span class="stat ${on?'on':'off'}"><span class="dot ${on?'on':'off'}"></span>${on?'Online':'Offline'}</span></td>
+    <td style="color:var(--mut)">${visto}</td>
+    <td style="color:var(--mut)">${esc(c.player_version||'—')}</td>
+    <td style="white-space:nowrap">
+      <button class="mini" onclick="verTela('${c.id}','${escJ(c.nome)}')">◱ Ver tela</button>
+      ${COLS_EXTRAS===false ? '' : `<button class="mini" onclick="acessoRemoto('${c.id}','${escJ(c.nome)}')" title="${c.rustdesk_id?'RustDesk '+escA(c.rustdesk_id):'RustDesk não configurado'}">⧉ Remoto</button>`}
+      <button class="mini" onclick="pedirRefresh('${c.id}','${escJ(c.nome)}')">⟳ Atualizar tela</button>
+      ${COLS_EXTRAS===false ? '' : `<button class="mini" onclick='editarTags("${c.id}","${escA(c.nome)}",${escA(JSON.stringify(tags))})'>⌗ Tags</button>`}
+      ${COLS_EXTRAS===false ? '' : pend
+        ? `<button class="mini" style="background:#332a10;border-color:#4a3d1c;color:#F5C518" onclick='autorizar("${c.id}",true,"${escA(c.nome)}")'>✓ Autorizar</button>`
+        : `<button class="mini" onclick='autorizar("${c.id}",false,"${escA(c.nome)}")' title="revogar autorização">⊘</button>`}
+    </td>
+  </tr>`;
+}
+
+// recalcula tags/status/busca sobre o que já está em memória (OV_CHS) e só
+// substitui os pedaços da tela que mudam — sem bater no banco de novo.
+// Essencial pra busca funcionar digitando, sem travar com muitas unidades.
+function renderOverviewInterativo(){
+  if(!OV_CHS.length) return;
+  const porTag = FILTRO_TAG ? OV_CHS.filter(c=> (c.tags||[]).includes(FILTRO_TAG)) : OV_CHS;
+
+  const termo = FILTRO_BUSCA.trim().toLowerCase();
+  const termoNum = termo.replace(/\D/g,'');
+  const porBusca = !termo ? porTag : porTag.filter(c=>{
+    const nome = (c.accounts && c.accounts.nome || '').toLowerCase();
+    const cnpj = (c.accounts && c.accounts.cnpj || '').replace(/\D/g,'');
+    return nome.includes(termo) || (termoNum && cnpj.includes(termoNum));
+  });
+
+  const nOn = porBusca.filter(c=>estaOnline(c.last_seen_at)).length;
+  const nOff = porBusca.length - nOn;
+  const statusTab=(chave,label,n)=>
+    `<button class="est-tab ${FILTRO_STATUS===chave?'active':''}" onclick="filtrarStatus(${chave===null?'null':"'"+chave+"'"})">${label} <span class="n">${n}</span></button>`;
+  const tabsHtml = statusTab(null,'Todas',porBusca.length) + statusTab('online','Online',nOn) + statusTab('offline','Offline',nOff);
+
+  let list = porBusca;
+  if(FILTRO_STATUS==='online') list = porBusca.filter(c=>estaOnline(c.last_seen_at));
+  else if(FILTRO_STATUS==='offline') list = porBusca.filter(c=>!estaOnline(c.last_seen_at));
+
+  let rowsHtml;
+  if(!list.length){
+    rowsHtml = termo
+      ? `<tr><td colspan="5"><div class="empty"><b>Nenhum resultado para "${esc(FILTRO_BUSCA)}"</b></div></td></tr>`
+      : `<tr><td colspan="5"><div class="empty"><b>Nenhum canal aqui</b>${FILTRO_STATUS?'Nenhum está '+(FILTRO_STATUS==='online'?'online':'offline')+' no momento.':''}</div></td></tr>`;
+  } else {
+    rowsHtml = list.map(linhaOverview).join('');
+  }
+
+  const tabsEl = document.getElementById('ovTabs');
+  const bodyEl = document.getElementById('ovBody');
+  const chipsEl = document.getElementById('ovChips');
+  if(tabsEl) tabsEl.innerHTML = tabsHtml;
+  if(bodyEl) bodyEl.innerHTML = rowsHtml;
+  if(chipsEl) chipsEl.innerHTML = chipsTagsInner(OV_CHS);
+}
+
+function chipsTagsInner(canais){
   if(COLS_EXTRAS === false) return '';   // recursos dormentes até rodar o SQL
   const cont = {};
   canais.forEach(c=> (c.tags||[]).forEach(t=> cont[t]=(cont[t]||0)+1 ));
@@ -2294,12 +3309,14 @@ function chipsTags(canais){
     '<button class="mini" style="'+(ativo?'background:#2a2118;border-color:#4a3d1c;color:#F5C518':'')+'" '+
     'onclick="filtrarTag('+(t===null?'null':'&#39;'+escJ(t)+'&#39;')+')">'+esc(t||'todas')+
     (n!==null?' <span style="opacity:.55">'+esc(n)+'</span>':'')+'</button>';
-  return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 2px">'+
-    chip(null,null,FILTRO_TAG===null)+
-    tags.map(t=> chip(t,cont[t],FILTRO_TAG===t)).join('')+'</div>';
+  return chip(null,null,FILTRO_TAG===null) + tags.map(t=> chip(t,cont[t],FILTRO_TAG===t)).join('');
 }
 
-function filtrarTag(t){ FILTRO_TAG = t; render(); }
+function chipsTags(canais){
+  const inner = chipsTagsInner(canais);
+  if(!inner) return '';
+  return '<div id="ovChips" style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 2px">'+inner+'</div>';
+}
 
 async function autorizar(channelId, valor, nome){
   const rotulo = valor ? 'Autorizar' : 'Revogar autorização de';
