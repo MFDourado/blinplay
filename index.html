@@ -4,6 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BlinPlay — Painel</title>
+<script>
+  // aplica o tema salvo ANTES do CSS pintar a tela, pra não piscar dark->light
+  try{ document.documentElement.dataset.theme = localStorage.getItem('blinplay_tema') || 'dark'; }
+  catch(e){ document.documentElement.dataset.theme = 'dark'; }
+</script>
 <!-- C3 — Biblioteca servida do PRÓPRIO domínio. Antes vinha do jsdelivr numa
      tag flutuante (@2) e sem SRI: um comprometimento da CDN, ou uma versão
      nova publicada com defeito, executaria JavaScript arbitrário em toda
@@ -26,6 +31,7 @@
       return;
     }
     sb = window.supabase.createClient(SB_URL, SB_KEY);
+    aplicarTema(document.documentElement.dataset.theme === 'light' ? 'light' : 'dark');
     // detecta retorno de convite (link do e-mail traz #access_token=...&type=invite|recovery)
     const h = window.location.hash || '';
     if (h.includes('access_token') && (h.includes('type=invite') || h.includes('type=recovery') || h.includes('type=signup'))) {
@@ -52,6 +58,20 @@
     --gold:#F5A800; --gold-d:#c98a00; --gold-soft:rgba(245,168,0,.12);
     --on:#34d399; --off:#f4606b; --info:#5aa9ff;
     --r:14px; --rs:10px;
+    /* tons auxiliares que antes eram hex fixo no meio do CSS — virar
+       variável é o que permite o tema claro sobrescrever só isso aqui */
+    --input-bg:#0c0c10; --chip-bg:#1e1e24; --mut3:#4a4a52; --mut4:#5f5f68;
+  }
+  /* TEMA CLARO — mesma estrutura, invertendo a relação de brilho entre
+     fundo da página e superfície dos cartões (cartão sempre mais claro
+     que o fundo, igual no escuro, só que os dois lados trocados). */
+  html[data-theme="light"]{
+    --bg:#f2f2ef; --bg2:#e8e8e4; --surf:#ffffff; --surf2:#f5f5f2;
+    --line:rgba(20,20,25,.10); --line2:rgba(20,20,25,.16);
+    --txt:#18181b; --mut:#5c5c66; --mut2:#93939c;
+    --gold:#F5A800; --gold-d:#c98a00; --gold-soft:rgba(245,168,0,.14);
+    --on:#0f9d63; --off:#d63b48; --info:#1c6fd6;
+    --input-bg:#eeeeea; --chip-bg:#eaeae6; --mut3:#c7c7c9; --mut4:#adadb2;
   }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%}
@@ -79,7 +99,7 @@
   .tag{text-align:center;color:var(--mut);font-size:13px;margin:14px 0 26px;letter-spacing:.04em}
   .fld{margin-bottom:13px}
   .fld label{display:block;font-size:11.5px;color:var(--mut);margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em}
-  .fld input{width:100%;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);
+  .fld input{width:100%;background:var(--input-bg);border:1px solid var(--line);border-radius:var(--rs);
     padding:12px 13px;color:var(--txt);font-size:14.5px;outline:none;transition:.18s}
   .fld input:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-soft)}
   .btn-gold{width:100%;background:linear-gradient(180deg,var(--gold),var(--gold-d));color:#1a1300;
@@ -157,7 +177,7 @@
 
   /* media grid */
   .mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;padding:18px}
-  .mcard{border:1px solid var(--line);border-radius:var(--rs);overflow:hidden;background:#0c0c10;transition:.15s}
+  .mcard{border:1px solid var(--line);border-radius:var(--rs);overflow:hidden;background:var(--input-bg);transition:.15s}
   .mcard:hover{border-color:var(--line2);transform:translateY(-2px)}
   .mthumb{aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;font-family:'Saira';font-weight:700;font-size:13px;color:rgba(255,255,255,.9);position:relative}
   .mbadge{position:absolute;top:7px;left:7px;font-size:9.5px;font-weight:700;padding:3px 7px;border-radius:6px;text-transform:uppercase;letter-spacing:.05em;background:rgba(0,0,0,.55);backdrop-filter:blur(4px)}
@@ -171,7 +191,7 @@
   .cli-side{border-right:1px solid var(--line)}
   .cli-search{padding:14px}
   .cli-search-wrap{position:relative}
-  .cli-search-wrap input{width:100%;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);
+  .cli-search-wrap input{width:100%;background:var(--input-bg);border:1px solid var(--line);border-radius:var(--rs);
     padding:9px 11px 9px 30px;color:var(--txt);font-size:13px;outline:none;transition:.18s}
   .cli-search-wrap input:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-soft)}
   .cli-search-ic{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--mut2);font-size:13px}
@@ -181,7 +201,7 @@
   .cli-row:hover{background:var(--surf);color:var(--txt)}
   .cli-row.active{background:var(--gold-soft);color:var(--gold);border-color:rgba(245,168,0,.3)}
   .cli-row span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .cli-row .n{background:#1e1e24;color:var(--mut);font-size:10.5px;padding:1px 7px;border-radius:12px;flex-shrink:0;margin-left:8px}
+  .cli-row .n{background:var(--chip-bg);color:var(--mut);font-size:10.5px;padding:1px 7px;border-radius:12px;flex-shrink:0;margin-left:8px}
   .cli-row.active .n{background:rgba(245,168,0,.18);color:var(--gold)}
   .cli-empty{padding:14px 10px;color:var(--mut2);font-size:12px;text-align:center}
 
@@ -216,7 +236,7 @@
   .pbadge{position:absolute;top:22px;right:24px;font-size:11px;font-weight:700;padding:7px 12px;border-radius:8px;text-transform:uppercase;letter-spacing:.05em;background:rgba(245,168,0,.9);color:#1a1300;z-index:3}
   .pbar{height:4px;background:rgba(255,255,255,.12);position:relative}
   .pbar i{position:absolute;left:0;top:0;height:100%;background:var(--gold);width:0}
-  .pctrl{background:#0c0c10;border-top:1px solid var(--line);padding:14px 22px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+  .pctrl{background:var(--input-bg);border-top:1px solid var(--line);padding:14px 22px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
   .pctrl .grp{display:flex;align-items:center;gap:9px}
   .pctrl label{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em}
   .pctrl input[type=date]{background:var(--surf2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:7px 10px;font-family:inherit;font-size:13px}
@@ -281,7 +301,7 @@
   .form-box .fsub{color:var(--mut);font-size:12.5px;margin-bottom:18px}
   .form-box .fld{margin-bottom:13px}
   .form-box label{display:block;font-size:11.5px;color:var(--mut);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em}
-  .form-box input,.form-box select{width:100%;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);padding:11px 12px;color:var(--txt);font-size:14px;outline:none;font-family:inherit}
+  .form-box input,.form-box select{width:100%;background:var(--input-bg);border:1px solid var(--line);border-radius:var(--rs);padding:11px 12px;color:var(--txt);font-size:14px;outline:none;font-family:inherit}
   .form-box input:focus{border-color:var(--gold)}
   .form-actions{display:flex;gap:10px;margin-top:20px}
   .form-actions button{flex:1;border-radius:var(--rs);padding:11px;font-weight:700;font-size:13.5px;border:0}
@@ -295,7 +315,7 @@
   .mactions .mini{flex:1;text-align:center;padding:6px 4px;font-size:11px}
   .prog-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
   .pl-list{padding:12px;display:flex;flex-direction:column;gap:9px;max-height:62vh;overflow-y:auto}
-  .pl-item{display:flex;align-items:center;gap:11px;background:#0c0c10;border:1px solid var(--line);border-radius:10px;padding:9px}
+  .pl-item{display:flex;align-items:center;gap:11px;background:var(--input-bg);border:1px solid var(--line);border-radius:10px;padding:9px}
   .pl-ord{width:22px;height:22px;flex-shrink:0;border-radius:6px;background:var(--gold-soft);color:var(--gold);font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center}
   .pl-th{width:64px;height:38px;flex-shrink:0;border-radius:6px;overflow:hidden;background:#000}
   .pl-meta{flex:1;min-width:0}
@@ -304,13 +324,13 @@
   .pl-btns{display:flex;gap:4px;flex-shrink:0}
   .pl-btns .mini{padding:5px 8px}
   .mini[disabled]{opacity:.3;pointer-events:none}
-  .checkbox-grid{display:flex;flex-direction:column;gap:7px;max-height:160px;overflow-y:auto;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);padding:11px}
+  .checkbox-grid{display:flex;flex-direction:column;gap:7px;max-height:160px;overflow-y:auto;background:var(--input-bg);border:1px solid var(--line);border-radius:var(--rs);padding:11px}
   .chk{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--txt);cursor:pointer}
   .chk input{width:auto;accent-color:var(--gold)}
   .chk-t{font-size:10.5px;color:var(--mut);background:var(--surf2);padding:1px 7px;border-radius:5px;margin-left:auto}
   .chk-empty{font-size:12px;color:var(--mut)}
   .hotel-list{display:flex;flex-direction:column;gap:9px;max-height:60vh;overflow-y:auto}
-  .hotel-pick{display:flex;flex-direction:column;gap:3px;align-items:flex-start;text-align:left;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);padding:13px 15px;transition:.13s;width:100%}
+  .hotel-pick{display:flex;flex-direction:column;gap:3px;align-items:flex-start;text-align:left;background:var(--input-bg);border:1px solid var(--line);border-radius:var(--rs);padding:13px 15px;transition:.13s;width:100%}
   .hotel-pick:hover{border-color:var(--gold);background:var(--gold-soft)}
   .hp-nome{font-family:'Saira';font-weight:700;font-size:15px;color:var(--txt)}
   .hp-cnpj{font-size:11.5px;color:var(--mut)}
@@ -322,7 +342,7 @@
   .ag-btn{background:var(--surf2);border:1px solid var(--line2);color:var(--txt);font-family:'Saira';font-weight:600;font-size:13px;padding:7px 12px;border-radius:9px;cursor:pointer;transition:.13s}
   .ag-btn:hover{border-color:var(--gold)}
   .ag-grid{border:1px solid var(--line);border-radius:var(--rs);overflow:hidden}
-  .ag-dow{display:grid;grid-template-columns:repeat(7,1fr);background:#0c0c10;border-bottom:1px solid var(--line)}
+  .ag-dow{display:grid;grid-template-columns:repeat(7,1fr);background:var(--input-bg);border-bottom:1px solid var(--line)}
   .ag-dow div{padding:9px 10px;font-size:10.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--mut)}
   .ag-week{position:relative;border-bottom:1px solid var(--line)}
   .ag-week:last-child{border-bottom:0}
@@ -330,7 +350,7 @@
   .ag-day{border-right:1px solid var(--line);padding:7px 8px;cursor:pointer;transition:background .12s}
   .ag-day:last-child{border-right:0}
   .ag-day:hover{background:var(--gold-soft)}
-  .ag-day.out{background:#0c0c10}
+  .ag-day.out{background:var(--input-bg)}
   .ag-n{font-size:12.5px;font-weight:600;color:var(--mut);width:24px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:50%}
   .ag-day.out .ag-n{color:#3a3a42}
   .ag-day.today .ag-n{background:var(--gold);color:#0a0a0c;font-weight:800}
@@ -348,7 +368,7 @@
   .ag-leg .it{display:flex;align-items:center;gap:7px}
   .ag-leg .sw{width:12px;height:12px;border-radius:3px;flex:none}
   .ag-sched-modal{display:flex;flex-direction:column;gap:10px}
-  .ag-cd{border:1px solid var(--line);border-radius:var(--rs);padding:12px 13px;background:#0c0c10}
+  .ag-cd{border:1px solid var(--line);border-radius:var(--rs);padding:12px 13px;background:var(--input-bg)}
   .ag-cd .ct{display:flex;align-items:center;gap:8px;margin-bottom:8px}
   .ag-cd .nm{font-family:'Saira';font-weight:700;font-size:14.5px;color:var(--txt)}
   .ag-cd .meta{display:grid;grid-template-columns:1fr 1fr;gap:7px 12px;font-size:12px;color:var(--mut)}
@@ -389,9 +409,10 @@
     <span class="logo"><img class="sym-img" src="img/blinplay-favicon.png" alt=""><b>BlinPlay</b></span>
     <span id="rolePill" class="role-pill"></span>
     <div id="navList"></div>
-    <div style="padding:10px 16px 4px;color:#4a4a52;font-size:10.5px;font-family:ui-monospace,monospace">painel <span id="painelVersao">—</span></div>
+    <div style="padding:10px 16px 4px;color:var(--mut3);font-size:10.5px;font-family:ui-monospace,monospace">painel <span id="painelVersao">—</span></div>
     <div class="side-foot">
       <button class="logout" id="btnAtualizar" onclick="atualizarPainel()" style="margin-bottom:6px"><span class="ic">⟳</span> Atualizar</button>
+      <button class="logout" id="temaBtn" onclick="alternarTema()" style="margin-bottom:6px"><span class="ic">☾</span> Tema</button>
       <button class="logout" onclick="logout()"><span class="ic">↩</span> Sair</button>
     </div>
   </aside>
@@ -407,6 +428,19 @@
    Cada um destes aparecia 5+ vezes copiado. Além do tamanho, cópia é onde a
    regra diverge: bastava alguém ajustar a janela de "online" num lugar e
    esquecer dos outros quatro. */
+function aplicarTema(t){
+  document.documentElement.dataset.theme = t;
+  try{ localStorage.setItem('blinplay_tema', t); }catch(e){}
+  const btn = document.getElementById('temaBtn');
+  if(btn) btn.innerHTML = t==='light'
+    ? '<span class="ic">☀</span> Tema claro'
+    : '<span class="ic">☾</span> Tema escuro';
+}
+function alternarTema(){
+  const atual = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+  aplicarTema(atual === 'light' ? 'dark' : 'light');
+}
+
 const ONLINE_MS = 5*60*1000;
 function estaOnline(ts){
   return !!ts && (Date.now() - new Date(ts).getTime() < ONLINE_MS);
@@ -574,12 +608,12 @@ function listaContasHtml(prefixo, lista, termo){
 function contaAreaBuscaHtml(prefixo, lista){
   return `<input type="text" id="${prefixo}Busca" placeholder="Digite pra filtrar…" autocomplete="off"
       oninput="buscarContaSugestao('${prefixo}', this.value)"
-      style="width:100%;height:38px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:0 12px;font-size:13px;box-sizing:border-box;margin-bottom:8px">
+      style="width:100%;height:38px;background:var(--input-bg);border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:0 12px;font-size:13px;box-sizing:border-box;margin-bottom:8px">
     <input type="hidden" id="${prefixo}ContaSel">
     <div id="${prefixo}Sugestoes" style="max-height:240px;overflow-y:auto;border:1px solid var(--line);border-radius:8px">${listaContasHtml(prefixo, lista, '')}</div>`;
 }
 function contaAreaSelecionadaHtml(prefixo, id, nome){
-  return `<div style="display:flex;align-items:center;gap:9px;height:38px;padding:0 12px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);box-sizing:border-box">
+  return `<div style="display:flex;align-items:center;gap:9px;height:38px;padding:0 12px;background:var(--input-bg);border:1px solid var(--line);border-radius:var(--rs);box-sizing:border-box">
       <span style="color:#3ddc84;font-size:15px;line-height:1">●</span>
       <b style="font-size:13px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(nome)}</b>
       <button type="button" class="mini" onclick="trocarConta('${prefixo}')">Trocar</button>
@@ -639,9 +673,9 @@ function cardWidgetHtml(def, accountId, existente, canais, canaisSelecionados){
   const camposExtra = def.tipo==='clima' ? `
     <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
       <input id="wg_clima_cidade" placeholder="Cidade" value="${escA(cfg.cidade||'')}"
-        style="flex:1;min-width:140px;background:#0c0c10;border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px 10px;font-size:12.5px">
+        style="flex:1;min-width:140px;background:var(--input-bg);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px 10px;font-size:12.5px">
       <input id="wg_clima_uf" placeholder="UF" maxlength="2" value="${escA(cfg.uf||'')}"
-        style="width:60px;background:#0c0c10;border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px 10px;font-size:12.5px;text-transform:uppercase">
+        style="width:60px;background:var(--input-bg);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px 10px;font-size:12.5px;text-transform:uppercase">
       <button class="mini" type="button" onclick='buscarCidadeCNPJ("${accountId}")'>Buscar pelo CNPJ</button>
     </div>
     <div id="wg_clima_msg" style="font-size:11.5px;color:var(--mut);margin-top:4px"></div>` : '';
@@ -670,10 +704,10 @@ function cardWidgetHtml(def, accountId, existente, canais, canaisSelecionados){
     <div style="display:flex;gap:16px;margin-top:10px;flex-wrap:wrap">
       <label style="font-size:12px;color:var(--mut)">Segundos na tela
         <input id="wg_${def.tipo}_dur" type="number" min="3" max="60" value="${dur}"
-          style="display:block;width:80px;margin-top:4px;background:#0c0c10;border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:6px 8px;font-size:12.5px"></label>
+          style="display:block;width:80px;margin-top:4px;background:var(--input-bg);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:6px 8px;font-size:12.5px"></label>
       <label style="font-size:12px;color:var(--mut)">Aparece a cada quantos itens
         <input id="wg_${def.tipo}_cada" type="number" min="1" max="50" value="${cada}"
-          style="display:block;width:80px;margin-top:4px;background:#0c0c10;border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:6px 8px;font-size:12.5px"></label>
+          style="display:block;width:80px;margin-top:4px;background:var(--input-bg);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:6px 8px;font-size:12.5px"></label>
     </div>
     ${camposExtra}
     <div style="margin-top:10px">
@@ -1482,15 +1516,15 @@ function linhaDispositivo(c){
         <div class="est-sub">${esc(cnpj||'sem CNPJ')}</div></td>
     <td><div class="est-name" style="font-size:13px">${esc(c.nome||'—')}</div>
         <div class="est-sub">código ${esc(c.codigo_curto||'—')}</div></td>
-    <td style="font-family:ui-monospace,monospace;font-size:12px;color:${c.mac_wifi?'var(--txt)':'#5f5f68'}">
+    <td style="font-family:ui-monospace,monospace;font-size:12px;color:${c.mac_wifi?'var(--txt)':'var(--mut4)'}">
         ${esc(c.mac_wifi || 'não cadastrado')}</td>
-    <td style="font-family:ui-monospace,monospace;font-size:12px;color:${c.mac_ethernet?'var(--txt)':'#5f5f68'}">
+    <td style="font-family:ui-monospace,monospace;font-size:12px;color:${c.mac_ethernet?'var(--txt)':'var(--mut4)'}">
         ${esc(c.mac_ethernet || 'não cadastrado')}</td>
     <td style="color:var(--mut);font-size:12px">${esc(c.ultimo_ip||'—')}</td>
     <td style="color:var(--mut);font-size:12px">${pct!==null ? pct+'%<div class="est-sub">'+gb(c.storage_livre)+' livre</div>' : '—'}</td>
     <td><span class="stat ${on?'on':'off'}"><span class="dot ${on?'on':'off'}"></span>${on?'Online':'Offline'}</span>
         <div class="est-sub">${esc(c.player_version||'—')}</div></td>
-    <td style="color:var(--mut);font-size:12px;max-width:180px">${c.observacao ? esc(c.observacao) : '<span style="color:#4a4a52">—</span>'}</td>
+    <td style="color:var(--mut);font-size:12px;max-width:180px">${c.observacao ? esc(c.observacao) : '<span style="color:var(--mut3)">—</span>'}</td>
     <td style="white-space:nowrap">
       <button class="mini" onclick='editarInventario("${c.id}","${nomeEsc}")'>✎ Editar</button>
     </td>
@@ -1562,7 +1596,7 @@ const VIEWS = {
            <div style="padding:14px 20px 14px">
              <input id="dvBusca" type="text" placeholder="Buscar por hotel, canal, código ou MAC…"
                value="${escA(DV_BUSCA)}" oninput="filtrarBuscaDispositivos(this.value)"
-               style="width:100%;max-width:360px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);
+               style="width:100%;max-width:360px;background:var(--input-bg);border:1px solid var(--line);border-radius:var(--rs);
                       color:var(--txt);padding:9px 12px;font-size:13px;font-family:inherit">
            </div>
            <table>
@@ -1635,7 +1669,7 @@ const VIEWS = {
         <div style="padding:14px 20px 14px">
           <input id="ovBusca" type="text" placeholder="Buscar por nome do hotel ou CNPJ…"
             value="${escA(FILTRO_BUSCA)}" oninput="filtrarBusca(this.value)"
-            style="width:100%;max-width:360px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);
+            style="width:100%;max-width:360px;background:var(--input-bg);border:1px solid var(--line);border-radius:var(--rs);
                    color:var(--txt);padding:9px 12px;font-size:13px;font-family:inherit">
         </div>
         <div class="est-tabs" id="ovTabs">${statusTabsHtml}</div>
@@ -1846,7 +1880,7 @@ const VIEWS = {
         const ativo = p.ativo!==false;
         const hoteis = porUser[p.id] || [];
         const listaH = hoteis.length
-          ? hoteis.slice(0,3).map(h=>'<span style="background:#1e1e24;color:var(--mut);font-size:10.5px;padding:2px 7px;border-radius:12px;margin-right:4px">'+h+'</span>').join('')
+          ? hoteis.slice(0,3).map(h=>'<span style="background:var(--chip-bg);color:var(--mut);font-size:10.5px;padding:2px 7px;border-radius:12px;margin-right:4px">'+h+'</span>').join('')
             + (hoteis.length>3 ? '<span style="color:var(--mut);font-size:10.5px">+'+(hoteis.length-3)+'</span>' : '')
           : '<span style="color:#c00">sem hotel vinculado</span>';
         const nEsc = String(p.nome||'').replace(/"/g,'&quot;');
@@ -2020,9 +2054,9 @@ const VIEWS = {
               <div id="relContaArea">${contaAreaBuscaHtml('rel', REL_ACCS)}</div>
             </div>
             <div><label style="font-size:12px;color:var(--mut);display:block;margin-bottom:5px">De</label>
-              <input id="relInicio" type="date" value="${mesPassado}" style="height:38px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:0 12px;font-size:13px;box-sizing:border-box"></div>
+              <input id="relInicio" type="date" value="${mesPassado}" style="height:38px;background:var(--input-bg);border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:0 12px;font-size:13px;box-sizing:border-box"></div>
             <div><label style="font-size:12px;color:var(--mut);display:block;margin-bottom:5px">Até</label>
-              <input id="relFim" type="date" value="${hoje}" style="height:38px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:0 12px;font-size:13px;box-sizing:border-box"></div>
+              <input id="relFim" type="date" value="${hoje}" style="height:38px;background:var(--input-bg);border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:0 12px;font-size:13px;box-sizing:border-box"></div>
             <button class="solid" onclick="gerarRelatorio()">Gerar</button>
           </div></div>
         <div id="relResultado"></div>`;
@@ -2039,7 +2073,7 @@ const VIEWS = {
 
     const seletorConta = rede
       ? `<div><label style="font-size:12px;color:var(--mut);display:block;margin-bottom:5px">Unidade</label>
-          <select id="relContaSel" style="min-width:220px;height:38px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:0 12px;font-size:13px;font-family:inherit;box-sizing:border-box;-webkit-appearance:none;appearance:none">
+          <select id="relContaSel" style="min-width:220px;height:38px;background:var(--input-bg);border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:0 12px;font-size:13px;font-family:inherit;box-sizing:border-box;-webkit-appearance:none;appearance:none">
             <option value="">Selecione…</option>
             ${CLI_ACCS.map(a=>`<option value="${a.id}">${esc(a.nome)}</option>`).join('')}
           </select></div>`
@@ -2051,9 +2085,9 @@ const VIEWS = {
           <div style="padding:16px 20px;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
             ${seletorConta}
             <div><label style="font-size:12px;color:var(--mut);display:block;margin-bottom:5px">De</label>
-              <input id="relInicio" type="date" value="${mesPassado}" style="height:38px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:0 12px;font-size:13px;box-sizing:border-box"></div>
+              <input id="relInicio" type="date" value="${mesPassado}" style="height:38px;background:var(--input-bg);border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:0 12px;font-size:13px;box-sizing:border-box"></div>
             <div><label style="font-size:12px;color:var(--mut);display:block;margin-bottom:5px">Até</label>
-              <input id="relFim" type="date" value="${hoje}" style="height:38px;background:#0c0c10;border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:0 12px;font-size:13px;box-sizing:border-box"></div>
+              <input id="relFim" type="date" value="${hoje}" style="height:38px;background:var(--input-bg);border:1px solid var(--line);border-radius:var(--rs);color:var(--txt);padding:0 12px;font-size:13px;box-sizing:border-box"></div>
             <button class="solid" ${botao}>Gerar</button>
           </div></div>
         <div id="relResultado"></div>`;
@@ -2677,7 +2711,7 @@ function mediaCardsHtml(list, isAdmin){
       : `<img src="${url}" loading="lazy" style="width:100%;height:100%;object-fit:cover" alt="">`;
     const tam = m.tamanho_bytes ? (m.tamanho_bytes/1048576).toFixed(1)+' MB' : '';
     return `<div class="mcard">
-      <div class="mthumb" style="background:#0c0c10;overflow:hidden;padding:0">
+      <div class="mthumb" style="background:var(--input-bg);overflow:hidden;padding:0">
         ${thumb}
         <span class="mbadge ${isVid?'vid':'img'}">${isVid?'▷ vídeo':'▣ imagem'}</span>
       </div>
@@ -3269,8 +3303,8 @@ function linhaOverview(c){
   const visto=c.last_seen_at?tempoRel(c.last_seen_at):'nunca';
   const tags=(c.tags||[]);
   const tagsHtml = tags.length
-    ? tags.map(t=>'<span style="background:#1e1e24;color:var(--mut);font-size:10.5px;padding:2px 7px;border-radius:12px;margin-right:4px">'+t+'</span>').join('')
-    : '<span style="color:#4a4a52;font-size:11px">sem tags</span>';
+    ? tags.map(t=>'<span style="background:var(--chip-bg);color:var(--mut);font-size:10.5px;padding:2px 7px;border-radius:12px;margin-right:4px">'+t+'</span>').join('')
+    : '<span style="color:var(--mut3);font-size:11px">sem tags</span>';
   const pend = (c.autorizado === false);
   return `<tr class="row">
     <td><div class="est-name">${esc(c.accounts?c.accounts.nome:'—')}${pend?' <span style="background:#332a10;color:#F5C518;font-size:10px;padding:2px 7px;border-radius:12px;vertical-align:middle">aguardando liberação</span>':''}</div>
@@ -3378,7 +3412,7 @@ async function editarTags(channelId, nome, atuais){
       '<input id="tg_in" placeholder="hilton, rj, migrado" value="'+val.replace(/"/g,'&quot;')+'"></div>'+
     (sugestoes.length
       ? '<div style="color:var(--mut);font-size:11.5px;line-height:1.8">Em uso: '+
-        sugestoes.map(t=>'<span style="background:#1e1e24;padding:2px 7px;border-radius:12px;margin-right:4px;cursor:pointer" '+
+        sugestoes.map(t=>'<span style="background:var(--chip-bg);padding:2px 7px;border-radius:12px;margin-right:4px;cursor:pointer" '+
         'onclick="addTag(&#39;'+escJ(t)+'&#39;)">'+esc(t)+'</span>').join('')+'</div>'
       : '')+
     '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">'+
