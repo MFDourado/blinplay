@@ -18,6 +18,12 @@
      Enquanto o arquivo local não existir, o onerror mantém o painel de pé. -->
 <script src="config.js"></script>
 <script src="supabase.js" onerror="this.onerror=null;var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';document.head.appendChild(s);"></script>
+<!-- Exportação de relatórios (Dispositivos): XLSX via SheetJS, PDF via jsPDF+autotable.
+     Carregadas sob demanda não compensa aqui — são pequenas e o botão de exportar
+     precisa funcionar na hora, sem esperar um download no meio do clique. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script>
   // ===== Conexão com o banco BlinPlay (Supabase) =====
   let sb = null;
@@ -1628,7 +1634,7 @@ const VIEWS = {
     // mesma proteção: se o SQL de dispositivos ainda não foi rodado, avisa em
     // vez de mostrar tela vazia sem explicação
     let { data: chs, error } = await sb.from('channels')
-      .select('id,nome,codigo_curto,mac_wifi,mac_ethernet,observacao,ultimo_ip,storage_livre,storage_total,last_seen_at,player_version,ativo,accounts(nome,cnpj)')
+      .select('id,nome,codigo_curto,mac_wifi,mac_ethernet,observacao,ultimo_ip,storage_livre,storage_total,last_seen_at,player_version,ativo,account_id,accounts(nome,cnpj)')
       .order('created_at');
     if(error){
       return topbar('Dispositivos','inventário indisponível')
@@ -1651,7 +1657,7 @@ const VIEWS = {
                      + (semEth ? ' · '+semEth +' sem MAC Ethernet' : ' · todos com MAC Ethernet');
     return topbar('Dispositivos',
       lista.length+' box(es) cadastrado(s)'+resumoMac,
-      `<button class="ghost" onclick="exportarDispositivos()">↓ Exportar CSV</button>`)
+      `<button class="ghost" onclick="abrirExportarDispositivos()">↓ Exportar</button>`)
       + `<div class="panel">
            <div class="panel-h"><h3>Inventário da frota</h3>
              <span class="hint">MAC é identificador fixo do aparelho; o IP muda</span></div>
@@ -3309,40 +3315,136 @@ async function salvarInventario(channelId){
   }
 }
 
-async function exportarDispositivos(){
+/* data/hora no fuso de Brasília, formato legível — em vez do ISO cru
+   (2026-10-01T13:21:41.476775+00:00) que o Postgres devolve. */
+function dataHoraBR(ts){
+  if(!ts) return '—';
+  const d = new Date(ts);
+  if(isNaN(d.getTime())) return '—';
+  return d.toLocaleString('pt-BR', {
+    timeZone:'America/Sao_Paulo', day:'2-digit', month:'2-digit', year:'numeric',
+    hour:'2-digit', minute:'2-digit', second:'2-digit'
+  });
+}
+
+/* CSV, ao abrir em planilha, executa valor começando com = + - @ como fórmula.
+   Usado tanto no CSV quanto nas células de texto do XLSX, por segurança. */
+function valorSeguro(v){
+  const t = String(v == null ? '' : v);
+  return /^[=+\-@\t\r]/.test(t) ? "'" + t : t;
+}
+
+function abrirExportarDispositivos(){
+  // conjunto de contas distintas presentes no inventário já carregado (sem refetch)
+  const contas = new Map();
+  DV_CHS.forEach(c=>{
+    if(c.account_id && !contas.has(c.account_id)){
+      contas.set(c.account_id, (c.accounts&&c.accounts.nome) || '(sem nome)');
+    }
+  });
+  const ordenadas = [...contas.entries()].sort((a,b)=> a[1].localeCompare(b[1],'pt-BR'));
+
+  const linhasContas = ordenadas.map(([id,nome])=>
+    `<label style="display:flex;align-items:center;gap:9px;padding:7px 2px;font-size:13.5px;cursor:pointer">
+       <input type="checkbox" class="exp-conta" value="${id}" checked style="width:16px;height:16px;accent-color:var(--gold)">
+       ${esc(nome)}
+     </label>`
+  ).join('');
+
+  abrirModal(
+    '<h3>Exportar dispositivos</h3>'+
+    '<div class="fsub">Escolha o(s) cliente(s) e o formato do arquivo</div>'+
+    '<div class="fld"><label>Clientes</label>'+
+      '<div style="display:flex;gap:14px;margin-bottom:8px">'+
+        '<button type="button" class="mini" onclick="document.querySelectorAll(\'.exp-conta\').forEach(c=>c.checked=true)">Marcar todos</button>'+
+        '<button type="button" class="mini" onclick="document.querySelectorAll(\'.exp-conta\').forEach(c=>c.checked=false)">Desmarcar todos</button>'+
+      '</div>'+
+      '<div style="max-height:220px;overflow-y:auto;border:1px solid var(--line);border-radius:var(--rs);padding:4px 10px;background:var(--input-bg)">'+
+        (linhasContas || '<div class="est-sub" style="padding:8px 0">Nenhum cliente no inventário carregado</div>')+
+      '</div>'+
+    '</div>'+
+    '<div class="fld"><label>Formato</label>'+
+      '<div style="display:flex;gap:16px">'+
+        '<label style="display:flex;align-items:center;gap:7px;font-size:13.5px;cursor:pointer">'+
+          '<input type="radio" name="exp_fmt" value="xlsx" checked style="accent-color:var(--gold)"> Excel (.xlsx)</label>'+
+        '<label style="display:flex;align-items:center;gap:7px;font-size:13.5px;cursor:pointer">'+
+          '<input type="radio" name="exp_fmt" value="pdf" style="accent-color:var(--gold)"> PDF</label>'+
+        '<label style="display:flex;align-items:center;gap:7px;font-size:13.5px;cursor:pointer">'+
+          '<input type="radio" name="exp_fmt" value="csv" style="accent-color:var(--gold)"> CSV</label>'+
+      '</div>'+
+    '</div>'+
+    '<div id="exp_msg" class="fmsg"></div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">'+
+      '<button class="ghost" onclick="fecharModal()">Cancelar</button>'+
+      '<button class="ghost" onclick="gerarExportacaoDispositivos()">Gerar</button></div>'
+  );
+}
+
+async function gerarExportacaoDispositivos(){
+  const msg = document.getElementById('exp_msg');
+  const idsMarcados = [...document.querySelectorAll('.exp-conta:checked')].map(c=>c.value);
+  const formato = (document.querySelector('input[name="exp_fmt"]:checked')||{}).value || 'xlsx';
+
+  if(!idsMarcados.length){
+    msg.className='fmsg err'; msg.textContent='Selecione pelo menos um cliente.';
+    return;
+  }
+  msg.className='fmsg'; msg.textContent='Gerando…';
+
   try{
-    const { data } = await sb.from('channels')
-      .select('nome,codigo_curto,mac_wifi,mac_ethernet,ultimo_ip,observacao,player_version,last_seen_at,storage_livre,storage_total,accounts(nome,cnpj)')
+    const { data, error } = await sb.from('channels')
+      .select('nome,codigo_curto,mac_wifi,mac_ethernet,ultimo_ip,observacao,player_version,last_seen_at,storage_livre,storage_total,account_id,accounts(nome,cnpj)')
+      .in('account_id', idsMarcados)
       .order('created_at');
+    if(error) throw error;
+
     const cab = ['Hotel','CNPJ','Canal','Código','MAC Wi-Fi','MAC Ethernet','IP','Versão','Último acesso','Disco livre GB','Disco total GB','Observação'];
     const linhas = (data||[]).map(c=>[
       c.accounts?c.accounts.nome:'', c.accounts?(c.accounts.cnpj||''):'',
       c.nome||'', c.codigo_curto||'', c.mac_wifi||'', c.mac_ethernet||'', c.ultimo_ip||'',
-      c.player_version||'', c.last_seen_at||'',
+      c.player_version||'', dataHoraBR(c.last_seen_at),
       c.storage_livre!=null?(c.storage_livre/1073741824).toFixed(2):'',
       c.storage_total!=null?(c.storage_total/1073741824).toFixed(2):'',
       (c.observacao||'').replace(/[\r\n]+/g,' ')
     ]);
-    /* M10 — observação e nomes são digitados pelo cliente e vão para um CSV
-       aberto no Excel. Valor começando com = + - @ é executado como fórmula.
-       O apóstrofo à frente neutraliza sem alterar o que a pessoa lê. */
-    const seguro = v => {
-      const t = String(v == null ? '' : v);
-      return /^[=+\-@\t\r]/.test(t) ? "'" + t : t;
-    };
-    const csv = [cab, ...linhas]
-      .map(l=> l.map(v=> '"'+seguro(v).replace(/"/g,'""')+'"').join(';'))
-      .join('\r\n');
-    // BOM para o Excel abrir acentuação correta
-    const blob = new Blob(['\ufeff'+csv], { type:'text/csv;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'dispositivos-blinplay-'+new Date().toISOString().slice(0,10)+'.csv';
-    a.click();
-    // M9 — revogar no mesmo tick cancela o download em alguns navegadores
-    const href = a.href;
-    setTimeout(()=> URL.revokeObjectURL(href), 0);
-  }catch(e){ alert('Erro ao exportar: '+((e&&e.message)||e)); }
+    const nomeArquivo = 'dispositivos-blinplay-'+new Date().toISOString().slice(0,10);
+
+    if(formato === 'xlsx'){
+      if(!window.XLSX) throw new Error('Biblioteca de Excel não carregou — verifique a internet e recarregue a página.');
+      const ws = XLSX.utils.aoa_to_sheet([cab, ...linhas.map(l=>l.map(valorSeguro))]);
+      ws['!cols'] = cab.map((_,i)=> ({ wch: Math.max(10, ...linhas.map(l=>String(l[i]||'').length), cab[i].length)+2 }));
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Dispositivos');
+      XLSX.writeFile(wb, nomeArquivo+'.xlsx');
+    } else if(formato === 'pdf'){
+      if(!window.jspdf || !window.jspdf.jsPDF) throw new Error('Biblioteca de PDF não carregou — verifique a internet e recarregue a página.');
+      const doc = new window.jspdf.jsPDF({ orientation:'landscape', unit:'pt', format:'a4' });
+      doc.setFontSize(12);
+      doc.text('Dispositivos BlinPlay — '+new Date().toLocaleDateString('pt-BR'), 28, 28);
+      doc.autoTable({
+        head:[cab], body:linhas, startY:40, styles:{ fontSize:7, cellPadding:3 },
+        headStyles:{ fillColor:[245,168,0], textColor:[26,19,0] },
+        margin:{ left:20, right:20 }
+      });
+      doc.save(nomeArquivo+'.pdf');
+    } else {
+      const csv = [cab, ...linhas]
+        .map(l=> l.map(v=> '"'+valorSeguro(v).replace(/"/g,'""')+'"').join(';'))
+        .join('\r\n');
+      const blob = new Blob(['\ufeff'+csv], { type:'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = nomeArquivo+'.csv';
+      a.click();
+      const href = a.href;
+      setTimeout(()=> URL.revokeObjectURL(href), 0);
+    }
+    msg.className='fmsg ok'; msg.textContent='Pronto.';
+    setTimeout(fecharModal, 500);
+  }catch(e){
+    msg.className='fmsg err';
+    msg.textContent = String((e&&e.message)||e);
+  }
 }
 
 /* ---- TAGS E AUTORIZAÇÃO -----------------------------------------------
