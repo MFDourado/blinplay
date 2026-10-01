@@ -140,6 +140,14 @@
   .nav.active .ic{color:var(--gold)}
   .nav .ic{width:17px;text-align:center;font-size:15px;color:var(--mut2)}
   .side-foot{margin-top:auto;border-top:1px solid var(--line);padding-top:14px}
+  /* linha de checkbox/radio dentro de modais — display:flex e normal-case
+     sobrescrevem de propósito a regra ".fld label" (uppercase, display:block),
+     que foi pensada só pro rótulo grande do campo, não pra estas linhas */
+  label.exp-row{display:flex!important;align-items:center;gap:10px;padding:7px 2px;
+    font-size:13.5px!important;text-transform:none!important;letter-spacing:normal!important;
+    color:var(--txt)!important;cursor:pointer;white-space:normal}
+  label.exp-row input{flex:0 0 auto;width:16px;height:16px;accent-color:var(--gold);margin:0}
+  label.exp-row span{flex:1 1 auto}
   .banner-offline{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:5000;
     background:var(--surf);border:1px solid var(--off);color:var(--txt);border-radius:var(--rs);
     padding:12px 16px;display:flex;align-items:center;gap:14px;box-shadow:0 10px 30px -8px rgba(0,0,0,.5);
@@ -3344,10 +3352,14 @@ function abrirExportarDispositivos(){
   });
   const ordenadas = [...contas.entries()].sort((a,b)=> a[1].localeCompare(b[1],'pt-BR'));
 
+  /* text-transform:none / normal-case / display:flex aqui pisam de propósito
+     em cima da regra ".fld label{...uppercase; display:block}" — essa regra
+     foi pensada pro rótulo grande do campo (tipo "MAC WI-FI"), não pra estas
+     linhas de checkbox/radio que moram dentro do mesmo .fld. */
   const linhasContas = ordenadas.map(([id,nome])=>
-    `<label style="display:flex;align-items:center;gap:9px;padding:7px 2px;font-size:13.5px;cursor:pointer">
-       <input type="checkbox" class="exp-conta" value="${id}" checked style="width:16px;height:16px;accent-color:var(--gold)">
-       ${esc(nome)}
+    `<label class="exp-row">
+       <input type="checkbox" class="exp-conta" value="${id}" checked>
+       <span>${esc(nome)}</span>
      </label>`
   ).join('');
 
@@ -3364,13 +3376,10 @@ function abrirExportarDispositivos(){
       '</div>'+
     '</div>'+
     '<div class="fld"><label>Formato</label>'+
-      '<div style="display:flex;gap:16px">'+
-        '<label style="display:flex;align-items:center;gap:7px;font-size:13.5px;cursor:pointer">'+
-          '<input type="radio" name="exp_fmt" value="xlsx" checked style="accent-color:var(--gold)"> Excel (.xlsx)</label>'+
-        '<label style="display:flex;align-items:center;gap:7px;font-size:13.5px;cursor:pointer">'+
-          '<input type="radio" name="exp_fmt" value="pdf" style="accent-color:var(--gold)"> PDF</label>'+
-        '<label style="display:flex;align-items:center;gap:7px;font-size:13.5px;cursor:pointer">'+
-          '<input type="radio" name="exp_fmt" value="csv" style="accent-color:var(--gold)"> CSV</label>'+
+      '<div style="display:flex;flex-direction:column;gap:2px">'+
+        '<label class="exp-row"><input type="radio" name="exp_fmt" value="xlsx" checked><span>Excel (.xlsx)</span></label>'+
+        '<label class="exp-row"><input type="radio" name="exp_fmt" value="pdf"><span>PDF</span></label>'+
+        '<label class="exp-row"><input type="radio" name="exp_fmt" value="csv"><span>CSV</span></label>'+
       '</div>'+
     '</div>'+
     '<div id="exp_msg" class="fmsg"></div>'+
