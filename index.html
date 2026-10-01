@@ -117,7 +117,8 @@
   #app{display:none;min-height:100vh;grid-template-columns:248px 1fr}
   #app.show{display:grid}
   .side{background:linear-gradient(180deg,var(--bg2),var(--bg));border-right:1px solid var(--line);
-    padding:20px 14px;display:flex;flex-direction:column;gap:4px;position:sticky;top:0;height:100vh}
+    padding:20px 14px;display:flex;flex-direction:column;gap:4px;position:sticky;top:0;height:100vh;
+    overflow-y:auto}
   .side .logo{padding:6px 10px 18px}
   .side .logo b{font-size:21px}
   .role-pill{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:700;
@@ -133,6 +134,14 @@
   .nav.active .ic{color:var(--gold)}
   .nav .ic{width:17px;text-align:center;font-size:15px;color:var(--mut2)}
   .side-foot{margin-top:auto;border-top:1px solid var(--line);padding-top:14px}
+  .banner-offline{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:5000;
+    background:var(--surf);border:1px solid var(--off);color:var(--txt);border-radius:var(--rs);
+    padding:12px 16px;display:flex;align-items:center;gap:14px;box-shadow:0 10px 30px -8px rgba(0,0,0,.5);
+    font-size:13.5px;max-width:90vw}
+  .banner-offline button{background:none;border:0;color:var(--mut);font-size:16px;line-height:1;
+    padding:0 4px;cursor:pointer}
+  .banner-offline button:hover{color:var(--off)}
+  @media(max-width:820px){ .banner-offline{top:64px;max-width:94vw} }
   .logout{color:var(--mut);font-size:12.5px;display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:var(--rs);background:none;border:1px solid transparent;width:100%}
   .logout:hover{color:var(--off);background:rgba(244,96,107,.08)}
 
@@ -270,9 +279,10 @@
   @media(max-width:820px){
     #app.show{display:block}
     .mobile-topbar{display:flex}
-    .side{position:fixed;top:0;left:0;height:100vh;width:270px;max-width:82vw;
+    .side{position:fixed;top:0;left:0;height:100vh;height:100dvh;width:270px;max-width:82vw;
       transform:translateX(-100%);transition:transform .22s ease;z-index:2001;
-      flex-direction:column;align-items:stretch;gap:4px;overflow-y:auto;box-shadow:20px 0 40px -10px rgba(0,0,0,.6)}
+      flex-direction:column;align-items:stretch;gap:4px;overflow-y:auto;-webkit-overflow-scrolling:touch;
+      overscroll-behavior:contain;box-shadow:20px 0 40px -10px rgba(0,0,0,.6)}
     .side.mobile-open{transform:translateX(0)}
     .side > .logo{display:flex}
     .fechar-menu-mobile{display:flex}
@@ -444,6 +454,57 @@ function alternarTema(){
 const ONLINE_MS = 5*60*1000;
 function estaOnline(ts){
   return !!ts && (Date.now() - new Date(ts).getTime() < ONLINE_MS);
+}
+
+/* ---- auto-refresh do painel + aviso de box que caiu ----
+   A cada 1 min: (1) compara o status atual de cada canal com o da leitura
+   anterior — quem estava online e virou offline dispara um banner; (2)
+   re-renderiza a tela atual, MAS pula esse passo se tiver um modal aberto,
+   pra não fechar uma edição em andamento embaixo do usuário. */
+let AUTOREFRESH_TIMER = null;
+let PRESENCA_ANTERIOR = null;   // null = primeira leitura: só estabelece a base, não avisa
+
+function ligarAutoRefresh(){
+  if(AUTOREFRESH_TIMER) return;   // já ligado (evita duplicar em re-login)
+  AUTOREFRESH_TIMER = setInterval(async ()=>{
+    await checarQuedasDeBox();
+    const m = document.getElementById('modalRoot');
+    const modalAberto = m && m.innerHTML.trim() !== '';
+    if(!modalAberto) render();
+  }, 60000);
+}
+
+async function checarQuedasDeBox(){
+  try{
+    const { data, error } = await sb.from('channels').select('id,nome,last_seen_at').eq('ativo', true);
+    if(error || !data) return;
+    const atual = {};
+    const quedas = [];
+    data.forEach(c=>{
+      const on = estaOnline(c.last_seen_at);
+      atual[c.id] = on;
+      if(PRESENCA_ANTERIOR && PRESENCA_ANTERIOR[c.id] === true && on === false) quedas.push(c.nome);
+    });
+    PRESENCA_ANTERIOR = atual;
+    if(quedas.length) mostrarBannerOffline(quedas);
+  }catch(e){ /* sem rede agora: não deixa o painel quebrar por isso */ }
+}
+
+function mostrarBannerOffline(nomes){
+  let el = document.getElementById('bannerOffline');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'bannerOffline';
+    el.className = 'banner-offline';
+    document.body.appendChild(el);
+  }
+  // se o banner ainda estava aberto de uma leitura anterior, acumula os nomes
+  const jaMostrados = (el.dataset.nomes || '').split('|').filter(Boolean);
+  const todos = [...new Set([...jaMostrados, ...nomes])];
+  el.dataset.nomes = todos.join('|');
+  const lista = todos.length>1 ? todos.slice(0,-1).join(', ')+' e '+todos.slice(-1) : todos[0];
+  el.innerHTML = `<span>🔴 ${todos.length>1?'Boxes ficaram':'Box ficou'} offline agora: <b>${esc(lista)}</b></span>
+                  <button onclick="document.getElementById('bannerOffline').remove()" aria-label="Fechar aviso">✕</button>`;
 }
 /* B9 — o CNPJ era gravado mascarado enquanto a validação olhava só os
    dígitos: a unicidade passava a depender de todo mundo sempre digitar pela
@@ -1248,6 +1309,7 @@ function enter(role){
     pill.innerHTML = '● '+esc(nomeConta) + (cnpjConta?` <span class="pill-cnpj">${esc(cnpjConta)}</span>`:'');
   }
   buildNav(); render();
+  ligarAutoRefresh();
 }
 
 let CLI_ACC = null;        // conta ativa do cliente (quando logado como gerente)
