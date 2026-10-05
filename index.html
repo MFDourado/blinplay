@@ -18,12 +18,12 @@
      Enquanto o arquivo local não existir, o onerror mantém o painel de pé. -->
 <script src="config.js"></script>
 <script src="supabase.js" onerror="this.onerror=null;var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';document.head.appendChild(s);"></script>
-<!-- Exportação de relatórios (Dispositivos): XLSX via SheetJS, PDF via jsPDF+autotable.
-     Carregadas sob demanda não compensa aqui — são pequenas e o botão de exportar
-     precisa funcionar na hora, sem esperar um download no meio do clique. -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<!-- Exportação (Dispositivos): bibliotecas HOSPEDADAS AQUI (pasta vendor/), não em CDN.
+     Script de terceiro roda com a sessão de admin aberta. Hospedado no próprio repositório
+     e travado com integrity, uma troca na origem não consegue injetar código no painel. -->
+<script src="vendor/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw"></script>
+<script src="vendor/jspdf.umd.min.js" integrity="sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk"></script>
+<script src="vendor/jspdf.plugin.autotable.min.js" integrity="sha384-fCAW/rDWORTbQXSiB7mOg0QtQ5c+r0f544y6XoKjuVva0nMBlCpNUjiFeG5iMdS3"></script>
 <script>
   // ===== Conexão com o banco BlinPlay (Supabase) =====
   let sb = null;
@@ -156,6 +156,66 @@
     padding:0 4px;cursor:pointer}
   .banner-offline button:hover{color:var(--off)}
   @media(max-width:820px){ .banner-offline{top:64px;max-width:94vw} }
+  .banner-offline .bn-txt{display:flex;align-items:center;gap:9px;cursor:pointer;flex-wrap:wrap}
+  .banner-offline .bn-dot{width:8px;height:8px;border-radius:50%;background:var(--off);flex:0 0 auto}
+  .banner-offline .bn-link{color:var(--mut);font-size:12px}
+
+  /* ---- MONITORAMENTO (visual enxuto: cor só no que é status) ---- */
+  .mon-root{color:var(--txt)}
+  .mon-root:fullscreen{background:var(--bg);padding:28px 36px;overflow:auto;font-size:112%}
+  .mon-fs-head{display:none;justify-content:space-between;align-items:baseline;margin:0 0 18px}
+  .mon-root:fullscreen .mon-fs-head{display:flex}
+  .mon-fs-head b{font-size:22px;font-weight:600}
+  .mon-fs-head span{color:var(--mut);font-variant-numeric:tabular-nums}
+  .mon-tabs{display:flex;gap:26px;border-bottom:1px solid var(--line);margin:0 0 22px}
+  .mon-tab{background:none;border:0;border-bottom:2px solid transparent;color:var(--mut);padding:10px 2px;
+    font-size:14px;cursor:pointer;font-family:inherit;margin-bottom:-1px}
+  .mon-tab:hover{color:var(--txt)}
+  .mon-tab.on{color:var(--txt);border-bottom-color:var(--gold)}
+  .mon-tab .n{color:var(--mut2);margin-left:7px;font-variant-numeric:tabular-nums}
+  .mon-kpis{display:flex;gap:44px;flex-wrap:wrap;margin:0 0 26px}
+  .mon-kpi small{display:flex;align-items:center;gap:7px;color:var(--mut);font-size:12px;margin-bottom:2px}
+  .mon-kpi b{font-size:32px;font-weight:500;font-variant-numeric:tabular-nums}
+  .mon-kpi.link{cursor:pointer}
+  .mon-kpi.link:hover small{color:var(--txt)}
+  .mon-dot{width:7px;height:7px;border-radius:50%;display:inline-block;flex:0 0 auto;background:var(--mut2)}
+  .mon-dot.on-dot{background:var(--on)} .mon-dot.off-dot{background:var(--off)} .mon-dot.warn-dot{background:var(--gold)}
+  .mon-flt{display:flex;gap:18px;margin:0 0 14px}
+  .mon-flt button{background:none;border:0;padding:2px 0;color:var(--mut);cursor:pointer;font-family:inherit;font-size:13px}
+  .mon-flt button.on{color:var(--txt);box-shadow:0 2px 0 var(--gold)}
+  .mon-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+  .mon-card{background:var(--surf);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;cursor:pointer;transition:border-color .15s}
+  .mon-card:hover{border-color:var(--line2)}
+  .mon-card .n{font-size:14px;margin-bottom:9px}
+  .mon-card .dots{display:flex;gap:5px;margin-bottom:7px}
+  .mon-card .c{font-size:12px;color:var(--mut)}
+  .mon-card .c.bad{color:var(--off)}
+  .mon-nil{color:var(--mut);font-size:12px;margin-top:16px}
+  .mon-stale{border:1px solid var(--line2);border-left:3px solid var(--off);border-radius:var(--rs);padding:9px 14px;margin:0 0 16px;font-size:13px}
+  .mon-chips{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 22px}
+  .mon-chip{background:none;border:1px solid var(--line);border-radius:999px;padding:6px 14px;color:var(--mut);
+    font-size:13px;cursor:pointer;font-family:inherit}
+  .mon-chip:hover{color:var(--txt)}
+  .mon-chip.on{color:var(--txt);border-color:var(--line2)}
+  .mon-det h2{font-size:20px;font-weight:600;margin:0 0 4px}
+  .mon-det .sub{color:var(--mut);font-size:13px;margin:0 0 4px}
+  .mon-det .head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin:0 0 6px}
+  .mon-lbl{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut2);margin:26px 0 10px}
+  .mon-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px 28px}
+  .mon-facts small{display:block;color:var(--mut);font-size:12px;margin-bottom:2px}
+  .mon-facts span{font-size:14px;word-break:break-all}
+  .mon-two{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:8px 40px}
+  .mon-tl{list-style:none;margin:0;padding:0 0 0 14px;border-left:1px solid var(--line)}
+  .mon-tl li{position:relative;padding:0 0 12px 12px;font-size:13px}
+  .mon-tl li:before{content:"";position:absolute;left:-18px;top:6px;width:7px;height:7px;border-radius:50%;background:var(--mut2)}
+  .mon-tl li.bad:before{background:var(--off)}
+  .mon-tl time{color:var(--mut);margin-right:8px;font-variant-numeric:tabular-nums}
+  .mon-list{list-style:none;margin:0;padding:0}
+  .mon-list li{padding:5px 0;font-size:13px;color:var(--txt)}
+  .mon-list li + li{border-top:1px solid var(--line)}
+  .mon-muted{color:var(--mut);font-size:13px}
+  .mon-read{border-left:2px solid var(--gold);padding:2px 0 2px 14px;font-size:13.5px;line-height:1.6}
+  .mon-read small{display:block;color:var(--mut);font-size:12px;margin-top:6px}
   .logout{color:var(--mut);font-size:12.5px;display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:var(--rs);background:none;border:1px solid transparent;width:100%}
   .logout:hover{color:var(--off);background:rgba(244,96,107,.08)}
 
@@ -475,6 +535,7 @@ function estaOnline(ts){
    anterior — quem estava online e virou offline dispara um banner; (2)
    re-renderiza a tela atual, MAS pula esse passo se tiver um modal aberto,
    pra não fechar uma edição em andamento embaixo do usuário. */
+const AUTO_RENDER = ['overview','estacoes','dispositivos','cli_overview','cli_canais'];
 let AUTOREFRESH_TIMER = null;
 let PRESENCA_ANTERIOR = null;   // null = primeira leitura: só estabelece a base, não avisa
 
@@ -484,7 +545,12 @@ function ligarAutoRefresh(){
     await checarQuedasDeBox();
     const m = document.getElementById('modalRoot');
     const modalAberto = m && m.innerHTML.trim() !== '';
-    if(!modalAberto) render();
+    // só re-renderiza telas de LEITURA (status). Telas de formulário/upload/edição ficam
+    // quietas: recarregar a cada minuto apagaria o que a pessoa está preenchendo.
+    // O Monitoramento tem o próprio ciclo de 15 s.
+    const f = document.activeElement;
+    const digitando = !!f && (/^(INPUT|TEXTAREA|SELECT)$/.test(f.tagName) || f.isContentEditable);
+    if(!modalAberto && !digitando && AUTO_RENDER.indexOf(CUR) !== -1) render();
   }, 60000);
 }
 
@@ -497,14 +563,14 @@ async function checarQuedasDeBox(){
     data.forEach(c=>{
       const on = estaOnline(c.last_seen_at);
       atual[c.id] = on;
-      if(PRESENCA_ANTERIOR && PRESENCA_ANTERIOR[c.id] === true && on === false) quedas.push(c.nome);
+      if(PRESENCA_ANTERIOR && PRESENCA_ANTERIOR[c.id] === true && on === false) quedas.push({ id:c.id, nome:c.nome });
     });
     PRESENCA_ANTERIOR = atual;
     if(quedas.length) mostrarBannerOffline(quedas);
   }catch(e){ /* sem rede agora: não deixa o painel quebrar por isso */ }
 }
 
-function mostrarBannerOffline(nomes){
+function mostrarBannerOffline(lista){
   let el = document.getElementById('bannerOffline');
   if(!el){
     el = document.createElement('div');
@@ -512,13 +578,29 @@ function mostrarBannerOffline(nomes){
     el.className = 'banner-offline';
     document.body.appendChild(el);
   }
-  // se o banner ainda estava aberto de uma leitura anterior, acumula os nomes
-  const jaMostrados = (el.dataset.nomes || '').split('|').filter(Boolean);
-  const todos = [...new Set([...jaMostrados, ...nomes])];
-  el.dataset.nomes = todos.join('|');
-  const lista = todos.length>1 ? todos.slice(0,-1).join(', ')+' e '+todos.slice(-1) : todos[0];
-  el.innerHTML = `<span>🔴 ${todos.length>1?'Boxes ficaram':'Box ficou'} offline agora: <b>${esc(lista)}</b></span>
+  // se o banner ainda estava aberto de uma leitura anterior, acumula os boxes
+  const mapa = new Map(JSON.parse(el.dataset.lista || '[]').map(x=>[x.id, x]));
+  lista.forEach(x=> mapa.set(x.id, x));
+  const todos = [...mapa.values()];
+  el.dataset.lista = JSON.stringify(todos);
+  const nomes = todos.map(x=>x.nome);
+  const txt = nomes.length>1 ? nomes.slice(0,-1).join(', ')+' e '+nomes.slice(-1) : nomes[0];
+  const admin = (ROLE === 'admin');
+  el.innerHTML = `<span class="bn-txt"${admin?' onclick="abrirMonitorQueda()" role="button" tabindex="0"':' style="cursor:default"'}>
+                    <i class="bn-dot"></i>${nomes.length>1?'Boxes ficaram':'Box ficou'} offline agora: <b>${esc(txt)}</b>
+                    ${admin?'<span class="bn-link">Ver detalhes ›</span>':''}</span>
                   <button onclick="document.getElementById('bannerOffline').remove()" aria-label="Fechar aviso">✕</button>`;
+}
+// clicar no aviso leva direto ao detalhe da queda no Monitoramento
+function abrirMonitorQueda(){
+  const el = document.getElementById('bannerOffline');
+  if(ROLE !== 'admin'){ if(el) el.remove(); return; }   // cliente não acessa o Monitoramento
+  const lista = el ? JSON.parse(el.dataset.lista || '[]') : [];
+  if(lista[0]) MON.sel = lista[0].id;
+  MON.tab = 'off';
+  CUR = 'monitor';
+  if(el) el.remove();
+  buildNav(); render(); fecharMenuMobile();
 }
 /* B9 — o CNPJ era gravado mascarado enquanto a validação olhava só os
    dígitos: a unicidade passava a depender de todo mundo sempre digitar pela
@@ -574,7 +656,7 @@ function escJ(v){
    Existe porque, sem ela, não há como saber qual index.html está publicado —
    e subir um arquivo antigo por engano é indistinguível de um recurso que
    não funcionou. */
-const PAINEL_VERSAO = 'v2.6';
+const PAINEL_VERSAO = 'v2.8';
 console.log('[BlinPlay] painel', PAINEL_VERSAO);
 
 /* ---------------- NAVEGAÇÃO ---------------- */
@@ -582,6 +664,7 @@ const NAV = {
   admin:[
     {sec:'OPERAÇÃO'},
     {k:'overview', ic:'▦', label:'Visão Geral'},
+    {k:'monitor', ic:'◐', label:'Monitoramento'},
     {k:'estacoes', ic:'▤', label:'Estações & Canais'},
     {k:'dispositivos', ic:'⌸', label:'Dispositivos'},
     {sec:'CONTEÚDO'},
@@ -1487,6 +1570,16 @@ async function atualizarPainel(){
 
 async function logout(){
   try{ if(sb) await sb.auth.signOut(); }catch(e){}
+  // encerra o que roda em segundo plano e apaga da memória os dados da sessão que saiu
+  if(AUTOREFRESH_TIMER){ clearInterval(AUTOREFRESH_TIMER); AUTOREFRESH_TIMER = null; }
+  PRESENCA_ANTERIOR = null;
+  monDesligar();
+  MON = { chs:[], tab:'pan', sel:null, fil:'all', hist:{}, t15:null, t1:null, atual:null };
+  DV_CHS = []; DV_BUSCA = '';
+  EST_CHS = []; EST_NPL = {}; REL_ULTIMO = null; WG_ACCS = []; REL_ACCS = [];
+  const bn = document.getElementById('bannerOffline'); if(bn) bn.remove();
+  try{ if(document.fullscreenElement) document.exitFullscreen(); }catch(e){}
+  const vw = document.getElementById('view'); if(vw) vw.innerHTML = '';
   CLI_ACC=null; CLI_ACCS=[]; PROG_CH=null;
   MIDIA_CLI_SEL=null; MIDIA_CLI_BUSCA=''; MIDIA_CLI_ACCS=null; MIDIA_CLI_CONT={}; MIDIA_CLI_TOTAL=0;
   CLI_OV_CHS=[]; CLI_OV_FILTRO=null;
@@ -1576,6 +1669,283 @@ async function buscarCanaisOverview(){
   return await sb.from('channels').select(BASICO).eq('ativo',true).order('created_at');
 }
 
+/* ---------------- MONITORAMENTO ----------------
+   Tela única para TV: Panorama geral, Online e Offline.
+   "Offline" aqui usa o MESMO critério do resto do painel (estaOnline: 5 min
+   sem sinal). O e-mail de alerta usa 30 min de propósito: a tela mostra na
+   hora, o e-mail só avisa quando a queda já é séria.
+   Atualização: busca no banco a cada 15 s; os "há Xs" correm a cada 1 s. */
+let MON = { chs:[], tab:'pan', sel:null, fil:'all', hist:{}, t15:null, t1:null, atual:null };
+
+async function monCarregar(){
+  const { data, error } = await sb.from('channels')
+    .select('id,nome,codigo_curto,account_id,last_seen_at,ultimo_ip,player_version,mac_wifi,mac_ethernet,storage_livre,storage_total,accounts(nome)')
+    .eq('ativo', true).order('nome');
+  if(error) throw error;
+  MON.chs = data || [];
+  MON.atual = new Date().toISOString();
+}
+
+function monDur(ms){
+  const m = Math.max(0, Math.round(ms/60000));
+  if(m < 60) return m+' min';
+  if(m < 1440) return Math.floor(m/60)+'h'+String(m%60).padStart(2,'0')+'min';
+  return Math.floor(m/1440)+'d '+Math.floor((m%1440)/60)+'h';
+}
+function monRel(ts){
+  if(!ts) return '—';
+  const s = Math.max(0, Math.round((Date.now()-new Date(ts).getTime())/1000));
+  return s < 60 ? 'há '+s+'s' : 'há '+monDur(s*1000);
+}
+function monQuando(d){
+  return new Date(d).toLocaleString('pt-BR', { timeZone:'America/Sao_Paulo', day:'2-digit', month:'2-digit',
+    hour:'2-digit', minute:'2-digit' }).replace(', ', ' ');
+}
+function monHora(d){
+  return parseInt(new Date(d).toLocaleString('pt-BR', { timeZone:'America/Sao_Paulo', hour:'2-digit', hour12:false }), 10) % 24;
+}
+function monHotel(c){ return (c.accounts && c.accounts.nome) || '(sem hotel)'; }
+function monVerCmp(a, b){          // compara "v5.10" com "v5.9" por número, não por texto
+  const pa = String(a).match(/\d+/g) || [], pb = String(b).match(/\d+/g) || [];
+  for(let i=0; i<Math.max(pa.length, pb.length); i++){
+    const d = (+pa[i] || 0) - (+pb[i] || 0);
+    if(d) return d;
+  }
+  return 0;
+}
+function monVMax(){
+  let v = null;
+  MON.chs.forEach(c=>{ if(c.player_version && (!v || monVerCmp(c.player_version, v) > 0)) v = c.player_version; });
+  return v;
+}
+function monAtencao(c, vMax){
+  const livreGB = c.storage_livre != null ? c.storage_livre/1073741824 : null;
+  return !!((c.player_version && vMax && monVerCmp(c.player_version, vMax) < 0) || (livreGB !== null && livreGB < 1));
+}
+function monGrupos(){
+  const on=[], off=[], nunca=[];
+  MON.chs.forEach(c=>{
+    if(!c.last_seen_at) nunca.push(c);
+    else if(estaOnline(c.last_seen_at)) on.push(c);
+    else off.push(c);
+  });
+  off.sort((a,b)=> new Date(b.last_seen_at) - new Date(a.last_seen_at));   // queda mais recente primeiro
+  return { on, off, nunca };
+}
+
+/* ---- abas ---- */
+function monTabsHTML(g){
+  const abas = [['pan','Panorama geral',''], ['on','Online',g.on.length], ['off','Offline',g.off.length]];
+  return abas.map(a=>`<button class="mon-tab${MON.tab===a[0]?' on':''}" onclick="monAba('${a[0]}')">${a[1]}${a[2]!==''?`<span class="n">${a[2]}</span>`:''}</button>`).join('');
+}
+function monBodyHTML(g){
+  return MON.tab==='on' ? monOnHTML(g) : (MON.tab==='off' ? monOffHTML(g) : monPanHTML(g));
+}
+
+/* ---- panorama ---- */
+function monPanHTML(g){
+  const vMax = monVMax();
+  const atencao = g.on.filter(c=> monAtencao(c, vMax)).length;
+  const kpis = `<div class="mon-kpis">
+    <div class="mon-kpi"><small>Boxes</small><b>${g.on.length+g.off.length}</b></div>
+    <div class="mon-kpi link" onclick="monAba('on')"><small><i class="mon-dot on-dot"></i>Online</small><b>${g.on.length}</b></div>
+    <div class="mon-kpi link" onclick="monAba('off')"><small><i class="mon-dot off-dot"></i>Offline</small><b>${g.off.length}</b></div>
+    <div class="mon-kpi"><small><i class="mon-dot warn-dot"></i>Com atenção</small><b>${atencao}</b></div></div>`;
+  const flt = `<div class="mon-flt">${[['all','Todos'],['on','Só online'],['off','Só offline']]
+    .map(f=>`<button class="${MON.fil===f[0]?'on':''}" onclick="monFiltro('${f[0]}')">${f[1]}</button>`).join('')}</div>`;
+
+  const m = new Map();
+  MON.chs.forEach(c=>{
+    const k = c.account_id || '-';
+    if(!m.has(k)) m.set(k, { nome: monHotel(c), boxes: [] });
+    m.get(k).boxes.push(c);
+  });
+  const estado = c => !c.last_seen_at ? 'nil' : (!estaOnline(c.last_seen_at) ? 'off' : (monAtencao(c, vMax) ? 'att' : 'on'));
+  const hoteis = [...m.values()].map(h=>{
+    h.bs = h.boxes.map(c=>({ c, e: estado(c) })).filter(x=>
+      MON.fil==='all' || (MON.fil==='on' ? (x.e==='on'||x.e==='att') : x.e==='off'));
+    h.prio = h.bs.some(x=>x.e==='off') ? 0 : (h.bs.some(x=>x.e==='att') ? 1 : 2);
+    return h;
+  }).filter(h=> h.bs.length).sort((a,b)=> a.prio-b.prio || a.nome.localeCompare(b.nome,'pt-BR'));
+
+  const cards = hoteis.map(h=>{
+    const offs = h.bs.filter(x=>x.e==='off').map(x=>x.c).sort((a,b)=> new Date(a.last_seen_at) - new Date(b.last_seen_at));
+    const att = h.bs.filter(x=>x.e==='att').length;
+    const nil = h.bs.filter(x=>x.e==='nil').length;
+    const dots = h.bs.map(x=>`<i class="mon-dot ${x.e==='off'?'off-dot':(x.e==='att'?'warn-dot':(x.e==='on'?'on-dot':''))}"></i>`).join('');
+    let st;
+    if(offs.length) st = `<div class="c bad">${offs.length} offline · <span data-ts="${offs[0].last_seen_at}">${monRel(offs[0].last_seen_at)}</span></div>`;
+    else if(att)    st = `<div class="c">${att} com atenção</div>`;
+    else if(nil && nil===h.bs.length) st = `<div class="c">aguardando 1º sinal</div>`;
+    else            st = `<div class="c">tudo certo</div>`;
+    const alvo = offs.length ? offs[offs.length-1].id : '';
+    return `<div class="mon-card" onclick="monAbrirCard('${alvo}')"><div class="n">${esc(h.nome)}</div><div class="dots">${dots}</div>${st}</div>`;
+  }).join('');
+
+  const aviso = g.nunca.length
+    ? `<div class="mon-nil">${g.nunca.length} canal(is) ainda sem 1º sinal, fora das contagens: ${g.nunca.map(c=>esc(c.nome)).join(', ')}</div>` : '';
+  return kpis + flt + (cards ? `<div class="mon-grid">${cards}</div>` : '<div class="empty"><b>Nenhum box neste filtro</b></div>') + aviso;
+}
+
+/* ---- online ---- */
+function monOnHTML(g){
+  if(!g.on.length) return '<div class="empty"><b>Nenhum box online agora</b></div>';
+  const vMax = monVMax();
+  const gb = n => n==null ? '—' : (n/1073741824).toFixed(1).replace('.',',')+' GB';
+  const rows = g.on.slice().sort((a,b)=> monHotel(a).localeCompare(monHotel(b),'pt-BR') || a.nome.localeCompare(b.nome,'pt-BR')).map(c=>{
+    const velha = c.player_version && vMax && monVerCmp(c.player_version, vMax) < 0;
+    const pouco = c.storage_livre != null && c.storage_livre/1073741824 < 1;
+    const flag = '<i class="mon-dot warn-dot" style="margin-right:6px"></i>';
+    return `<tr>
+      <td><div class="est-name">${esc(monHotel(c))}</div><div class="est-sub">${esc(c.nome)}</div></td>
+      <td>${velha?flag:''}${esc(c.player_version||'—')}</td>
+      <td><span data-ts="${c.last_seen_at}">${monRel(c.last_seen_at)}</span></td>
+      <td style="color:var(--mut)">${esc(c.ultimo_ip||'—')}</td>
+      <td>${pouco?flag:''}${gb(c.storage_livre)}</td></tr>`;
+  }).join('');
+  return `<div class="panel"><table><thead><tr><th>Box</th><th>Versão</th><th>Último sinal</th><th>IP</th><th>Livre no box</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+/* ---- offline ---- */
+async function monCarregarHist(id){
+  MON.hist[id] = Object.assign({}, MON.hist[id], { carregando:true });
+  const desde = new Date(Date.now()-7*86400000).toISOString();
+  const { data, error } = await sb.from('eventos_conexao').select('tipo,quando,ip')
+    .eq('channel_id', id).gte('quando', desde).order('quando', { ascending:true });
+  MON.hist[id] = error ? { erro:true, em:Date.now() } : { ev:data||[], em:Date.now() };
+  monDraw();
+}
+function monQuedas(ev){
+  const out = []; let aberta = null;
+  ev.forEach(e=>{
+    if(e.tipo==='caiu'){ aberta = { ini:new Date(e.quando), fim:null }; out.push(aberta); }
+    else if(e.tipo==='voltou' && aberta){ aberta.fim = new Date(e.quando); aberta = null; }
+  });
+  return out;
+}
+function monPadrao(quedas){
+  if(quedas.length < 3) return '';
+  const cont = new Array(24).fill(0);
+  quedas.forEach(q=> cont[monHora(q.ini)]++);
+  let melhor = 0, ini = 0;
+  for(let s=0; s<24; s++){
+    const t = cont[s] + cont[(s+1)%24] + cont[(s+2)%24];
+    if(t > melhor){ melhor = t; ini = s; }
+  }
+  if(melhor/quedas.length < 0.6) return '';
+  return melhor+' de '+quedas.length+' quedas foram entre '+String(ini).padStart(2,'0')+'h e '+String((ini+3)%24).padStart(2,'0')+'h.';
+}
+function monOffHTML(g){
+  if(!g.off.length) return '<div class="empty"><b>Nenhum box offline</b>Tudo certo por aqui.</div>';
+  if(!MON.sel || !g.off.find(c=>c.id===MON.sel)) MON.sel = g.off[0].id;
+  const chips = `<div class="mon-chips">${g.off.map(c=>
+    `<button class="mon-chip${c.id===MON.sel?' on':''}" onclick="monSel('${c.id}')">${esc(monHotel(c))} · ${esc(c.nome)}</button>`).join('')}</div>`;
+  return chips + monDetalheHTML(g.off.find(c=>c.id===MON.sel), g);
+}
+function monDetalheHTML(c, g){
+  const h = MON.hist[c.id];
+  if(!h || (h.em && Date.now()-h.em > 60000 && !h.carregando)) monCarregarHist(c.id);
+
+  // histórico de quedas (tabela eventos_conexao)
+  let quedas = [], histHTML;
+  if(!h || (h.carregando && !h.ev && !h.erro)) histHTML = '<div class="mon-muted">Carregando histórico…</div>';
+  else if(h.erro) histHTML = '<div class="mon-muted">Histórico indisponível: rode o SQL de eventos_conexao no Supabase.</div>';
+  else {
+    quedas = monQuedas(h.ev);
+    histHTML = quedas.length
+      ? `<ul class="mon-list">${quedas.slice().reverse().slice(0,8).map(q=>
+          `<li>${monQuando(q.ini)} · ${q.fim ? monDur(q.fim-q.ini) : '<b style="font-weight:600">em andamento</b>'}</li>`).join('')}</ul>`
+      : '<div class="mon-muted">Nenhuma queda registrada nos últimos 7 dias.</div>';
+  }
+
+  // leitura automática (indícios, não prova)
+  const mesmo = MON.chs.filter(x=> x.account_id && x.account_id===c.account_id && x.id!==c.id && x.last_seen_at);
+  const mesmoOn = mesmo.filter(x=> estaOnline(x.last_seen_at)).length;
+  const linhas = [];
+  if(!mesmo.length) linhas.push('Único box deste hotel: não há com quem comparar.');
+  else if(mesmoOn===mesmo.length) linhas.push('Os outros '+mesmo.length+' box(es) deste hotel seguem online: o problema parece isolado neste aparelho (energia, cabo ou box travado).');
+  else if(mesmoOn===0) linhas.push('Todos os boxes deste hotel pararam: indício de queda da rede ou da internet do hotel.');
+  else linhas.push(mesmoOn+' de '+mesmo.length+' outros boxes do hotel seguem online.');
+  const simult = g.off.filter(x=> x.account_id!==c.account_id &&
+    Math.abs(new Date(x.last_seen_at)-new Date(c.last_seen_at)) <= 10*60000);
+  if(simult.length) linhas.push([...new Set(simult.map(monHotel))].join(', ')+' também parou em janela de 10 min (pode ser coincidência).');
+  const pad = monPadrao(quedas); if(pad) linhas.push(pad);
+
+  const caiu = new Date(new Date(c.last_seen_at).getTime() + ONLINE_MS);
+  return `<div class="mon-det">
+    <div class="head"><div><h2>${esc(monHotel(c))} · ${esc(c.nome)}</h2>
+      <div class="sub">Offline <span data-ts="${c.last_seen_at}">${monRel(c.last_seen_at)}</span></div></div>
+      <button class="ghost" id="monCp" onclick="monCopiar('${c.id}')">Copiar resumo para o T.I.</button></div>
+
+    <div class="mon-lbl">Aparelho</div>
+    <div class="mon-facts">
+      <div><small>Último sinal</small><span>${dataHoraBR(c.last_seen_at)}</span></div>
+      <div><small>Último IP</small><span>${esc(c.ultimo_ip||'—')}</span></div>
+      <div><small>MAC Wi-Fi</small><span>${esc(c.mac_wifi||'não cadastrado')}</span></div>
+      <div><small>MAC Ethernet</small><span>${esc(c.mac_ethernet||'não cadastrado')}</span></div>
+      <div><small>Versão</small><span>${esc(c.player_version||'—')}</span></div></div>
+
+    <div class="mon-two">
+      <div><div class="mon-lbl">Linha do tempo desta queda</div>
+        <ul class="mon-tl">
+          <li class="bad"><time>${monQuando(caiu)}</time>Passou de ${Math.round(ONLINE_MS/60000)} min sem sinal: marcado offline</li>
+          <li><time>${monQuando(c.last_seen_at)}</time>Último contato com a base</li></ul></div>
+      <div><div class="mon-lbl">Quedas nos últimos 7 dias</div>${histHTML}</div></div>
+
+    <div class="mon-lbl">Leitura automática</div>
+    <div class="mon-read">${linhas.map(esc).join('<br>')}
+      <small>Pelo servidor não dá para saber se o box está desligado ou sem internet: isto é indício, não prova.</small></div></div>`;
+}
+
+/* ---- ações ---- */
+function monAlerta(){
+  const el = document.getElementById('monAlerta'); if(!el || !MON.atual) return;
+  const idade = Date.now() - new Date(MON.atual).getTime();
+  el.innerHTML = idade > 45000
+    ? '<div class="mon-stale"><b>Dados desatualizados</b> · última atualização há '+monDur(idade)+'. Confira a internet desta tela; o que aparece abaixo pode não ser o estado atual.</div>'
+    : '';
+}
+function monDraw(){
+  const root = document.getElementById('monRoot'); if(!root) return;
+  monAlerta();
+  const g = monGrupos();
+  document.getElementById('monTabs').innerHTML = monTabsHTML(g);
+  document.getElementById('monBody').innerHTML = monBodyHTML(g);
+  const sub = document.getElementById('monSub');
+  if(sub) sub.innerHTML = (g.on.length+g.off.length)+' boxes · atualizado <span data-ts="'+MON.atual+'">'+monRel(MON.atual)+'</span>';
+}
+function monAba(t){ MON.tab = t; monDraw(); }
+function monFiltro(f){ MON.fil = f; monDraw(); }
+function monSel(id){ MON.sel = id; monDraw(); }
+function monAbrirCard(id){ if(id){ MON.sel = id; MON.tab = 'off'; } else { MON.tab = 'on'; } monDraw(); }
+function monTelaCheia(){ const r = document.getElementById('monRoot'); if(r && r.requestFullscreen) r.requestFullscreen(); }
+function monCopiar(id){
+  const c = MON.chs.find(x=>x.id===id); if(!c) return;
+  const txt = ['Box BlinPlay sem comunicação', 'Hotel: '+monHotel(c), 'Canal: '+c.nome,
+    'Último sinal: '+dataHoraBR(c.last_seen_at), 'Último IP: '+(c.ultimo_ip||'—'),
+    'MAC Wi-Fi: '+(c.mac_wifi||'—'), 'MAC Ethernet: '+(c.mac_ethernet||'—')].join('\n');
+  const ok = ()=>{ const b = document.getElementById('monCp'); if(b) b.textContent = 'Resumo copiado'; };
+  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(ok).catch(()=> prompt('Copie o resumo:', txt));
+  else prompt('Copie o resumo:', txt);
+}
+function monDesligar(){ clearInterval(MON.t15); clearInterval(MON.t1); MON.t15 = MON.t1 = null; }
+function monLigarTimers(){
+  if(MON.t15) return;
+  // busca nova no banco a cada 15 s
+  MON.t15 = setInterval(async ()=>{
+    if(CUR !== 'monitor' || !document.getElementById('monRoot')){ monDesligar(); return; }
+    try{ await monCarregar(); monDraw(); }catch(e){ /* sem rede: mantém o que está na tela */ }
+  }, 15000);
+  // relógio e "há Xs" correm a cada segundo, sem ir ao banco
+  MON.t1 = setInterval(()=>{
+    if(CUR !== 'monitor' || !document.getElementById('monRoot')){ monDesligar(); return; }
+    document.querySelectorAll('#monRoot [data-ts], #monSub [data-ts]').forEach(el=>{ el.textContent = monRel(el.dataset.ts); });
+    monAlerta();
+    const clk = document.getElementById('monClk');
+    if(clk) clk.textContent = new Date().toLocaleString('pt-BR', { timeZone:'America/Sao_Paulo' });
+  }, 1000);
+}
+
 let DV_CHS = [];          // guarda os dispositivos já buscados, pra filtrar sem refetch
 let DV_BUSCA = '';
 
@@ -1633,6 +2003,20 @@ function filtrarBuscaDispositivos(v){
 }
 
 const VIEWS = {
+  monitor: async ()=>{
+    if(ROLE !== 'admin') return '<div class="empty"><b>Acesso restrito</b>Esta tela é só para a equipe interna da Blincast.</div>';
+    await monCarregar();
+    monLigarTimers();
+    const g = monGrupos();
+    return topbar('Monitoramento',
+        '<span id="monSub">'+(g.on.length+g.off.length)+' boxes · atualizado <span data-ts="'+MON.atual+'">'+monRel(MON.atual)+'</span></span>',
+        '<button class="ghost" onclick="monTelaCheia()">⛶ Tela cheia</button>')
+      + '<div class="mon-root" id="monRoot">'
+      + '<div class="mon-fs-head"><b>Monitoramento</b><span id="monClk"></span></div>'
+      + '<div id="monAlerta"></div>'
+      + '<div class="mon-tabs" id="monTabs">'+monTabsHTML(g)+'</div>'
+      + '<div id="monBody">'+monBodyHTML(g)+'</div></div>';
+  },
   /* ===== ADMIN ===== */
 
   /* Inventário físico da frota: onde o box está, de quem é, qual o MAC.
