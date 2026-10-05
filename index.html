@@ -180,17 +180,20 @@
   .mon-kpi.link:hover small{color:var(--txt)}
   .mon-dot{width:7px;height:7px;border-radius:50%;display:inline-block;flex:0 0 auto;background:var(--mut2)}
   .mon-dot.on-dot{background:var(--on)} .mon-dot.off-dot{background:var(--off)} .mon-dot.warn-dot{background:var(--gold)}
-  .mon-flt{display:flex;gap:18px;margin:0 0 14px}
-  .mon-flt button{background:none;border:0;padding:2px 0;color:var(--mut);cursor:pointer;font-family:inherit;font-size:13px}
-  .mon-flt button.on{color:var(--txt);box-shadow:0 2px 0 var(--gold)}
-  .mon-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
-  .mon-card{background:var(--surf);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;cursor:pointer;transition:border-color .15s}
-  .mon-card:hover{border-color:var(--line2)}
-  .mon-card .n{font-size:14px;margin-bottom:9px}
-  .mon-card .dots{display:flex;gap:5px;margin-bottom:7px}
-  .mon-card .c{font-size:12px;color:var(--mut)}
-  .mon-card .c.bad{color:var(--off)}
-  .mon-nil{color:var(--mut);font-size:12px;margin-top:16px}
+  .mon-nil{color:var(--mut);font-size:12px;margin-top:22px}
+  .mon-split{display:grid;grid-template-columns:1fr 1px 1fr;gap:0 32px}
+  .mon-div{background:var(--line2)}
+  .mon-colh{display:flex;align-items:center;gap:9px;font-size:15px;padding:0 0 10px;border-bottom:1px solid var(--line)}
+  .mon-colh .n{color:var(--mut2);margin-left:2px;font-variant-numeric:tabular-nums}
+  .mon-li{display:flex;align-items:center;gap:12px;padding:11px 4px;border-bottom:1px solid var(--line);cursor:pointer}
+  .mon-li:hover{background:var(--surf2)}
+  .mon-li .nm{flex:1;min-width:0;font-size:14.5px}
+  .mon-canal{color:var(--mut);font-size:13px}
+  .mon-t{font-size:13px;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .mon-t.mut{color:var(--mut)}
+  .mon-t.bad{color:var(--off)}
+  .mon-tag{color:var(--gold);font-size:11px;margin-left:8px}
+  @media(max-width:820px){ .mon-split{grid-template-columns:1fr;gap:26px 0} .mon-div{display:none} }
   .mon-row{cursor:pointer}
   .mon-row:hover td{background:var(--surf2)}
   .mon-stale{border:1px solid var(--line2);border-left:3px solid var(--off);border-radius:var(--rs);padding:9px 14px;margin:0 0 16px;font-size:13px}
@@ -658,7 +661,7 @@ function escJ(v){
    Existe porque, sem ela, não há como saber qual index.html está publicado —
    e subir um arquivo antigo por engano é indistinguível de um recurso que
    não funcionou. */
-const PAINEL_VERSAO = 'v2.9';
+const PAINEL_VERSAO = 'v3.0';
 console.log('[BlinPlay] painel', PAINEL_VERSAO);
 
 /* ---------------- NAVEGAÇÃO ---------------- */
@@ -1576,7 +1579,7 @@ async function logout(){
   if(AUTOREFRESH_TIMER){ clearInterval(AUTOREFRESH_TIMER); AUTOREFRESH_TIMER = null; }
   PRESENCA_ANTERIOR = null;
   monDesligar();
-  MON = { chs:[], tab:'pan', sel:null, fil:'all', hist:{}, t15:null, t1:null, atual:null };
+  MON = { chs:[], tab:'pan', sel:null, hist:{}, voltas:null, voltasEm:0, t15:null, t1:null, atual:null };
   DV_CHS = []; DV_BUSCA = '';
   EST_CHS = []; EST_NPL = {}; REL_ULTIMO = null; WG_ACCS = []; REL_ACCS = [];
   const bn = document.getElementById('bannerOffline'); if(bn) bn.remove();
@@ -1677,7 +1680,7 @@ async function buscarCanaisOverview(){
    sem sinal). O e-mail de alerta usa 30 min de propósito: a tela mostra na
    hora, o e-mail só avisa quando a queda já é séria.
    Atualização: busca no banco a cada 15 s; os "há Xs" correm a cada 1 s. */
-let MON = { chs:[], tab:'pan', sel:null, fil:'all', hist:{}, t15:null, t1:null, atual:null };
+let MON = { chs:[], tab:'pan', sel:null, hist:{}, voltas:null, voltasEm:0, t15:null, t1:null, atual:null };
 
 async function monCarregar(){
   const { data, error } = await sb.from('channels')
@@ -1686,6 +1689,21 @@ async function monCarregar(){
   if(error) throw error;
   MON.chs = data || [];
   MON.atual = new Date().toISOString();
+  await monCarregarVoltas();
+}
+/* Último evento de conexão de cada box (caiu/voltou): é daí que sai o "online há X".
+   Sem a tabela eventos_conexao, MON.voltas fica null e a lista mostra só "online". */
+async function monCarregarVoltas(){
+  if(MON.voltas && Date.now() - MON.voltasEm < 55000) return;
+  try{
+    const { data, error } = await sb.from('eventos_conexao').select('channel_id,tipo,quando')
+      .order('id', { ascending:false }).limit(1000);
+    if(error) throw error;
+    const m = {};
+    (data || []).forEach(e=>{ if(!m[e.channel_id]) m[e.channel_id] = e; });   // o 1º de cada box é o mais recente
+    MON.voltas = m;
+  }catch(e){ MON.voltas = null; }
+  MON.voltasEm = Date.now();
 }
 
 function monDur(ms){
@@ -1744,7 +1762,7 @@ function monBodyHTML(g){
   return MON.tab==='on' ? monOnHTML(g) : (MON.tab==='off' ? monOffHTML(g) : monPanHTML(g));
 }
 
-/* ---- panorama ---- */
+/* ---- panorama: Online à esquerda, Offline à direita, linha no meio ---- */
 function monPanHTML(g){
   const vMax = monVMax();
   const atencao = g.on.filter(c=> monAtencao(c, vMax)).length;
@@ -1753,40 +1771,34 @@ function monPanHTML(g){
     <div class="mon-kpi link" onclick="monAba('on')"><small><i class="mon-dot on-dot"></i>Online</small><b>${g.on.length}</b></div>
     <div class="mon-kpi link" onclick="monAba('off')"><small><i class="mon-dot off-dot"></i>Offline</small><b>${g.off.length}</b></div>
     <div class="mon-kpi"><small><i class="mon-dot warn-dot"></i>Com atenção</small><b>${atencao}</b></div></div>`;
-  const flt = `<div class="mon-flt">${[['all','Todos'],['on','Só online'],['off','Só offline']]
-    .map(f=>`<button class="${MON.fil===f[0]?'on':''}" onclick="monFiltro('${f[0]}')">${f[1]}</button>`).join('')}</div>`;
 
-  const m = new Map();
-  MON.chs.forEach(c=>{
-    const k = c.account_id || '-';
-    if(!m.has(k)) m.set(k, { nome: monHotel(c), boxes: [] });
-    m.get(k).boxes.push(c);
-  });
-  const estado = c => !c.last_seen_at ? 'nil' : (!estaOnline(c.last_seen_at) ? 'off' : (monAtencao(c, vMax) ? 'att' : 'on'));
-  const hoteis = [...m.values()].map(h=>{
-    h.bs = h.boxes.map(c=>({ c, e: estado(c) })).filter(x=>
-      MON.fil==='all' || (MON.fil==='on' ? (x.e==='on'||x.e==='att') : x.e==='off'));
-    h.prio = h.bs.some(x=>x.e==='off') ? 0 : (h.bs.some(x=>x.e==='att') ? 1 : 2);
-    return h;
-  }).filter(h=> h.bs.length).sort((a,b)=> a.prio-b.prio || a.nome.localeCompare(b.nome,'pt-BR'));
+  const nome = c => { const h = monHotel(c);
+    return (c.nome && c.nome !== h) ? `${esc(h)} <span class="mon-canal">· ${esc(c.nome)}</span>` : esc(h); };
+  const ordem = (a,b)=> monHotel(a).localeCompare(monHotel(b),'pt-BR') || a.nome.localeCompare(b.nome,'pt-BR');
 
-  const cards = hoteis.map(h=>{
-    const offs = h.bs.filter(x=>x.e==='off').map(x=>x.c).sort((a,b)=> new Date(a.last_seen_at) - new Date(b.last_seen_at));
-    const att = h.bs.filter(x=>x.e==='att').length;
-    const nil = h.bs.filter(x=>x.e==='nil').length;
-    const dots = h.bs.map(x=>`<i class="mon-dot ${x.e==='off'?'off-dot':(x.e==='att'?'warn-dot':(x.e==='on'?'on-dot':''))}"></i>`).join('');
-    let st;
-    if(offs.length) st = `<div class="c bad">${offs.length} offline · <span data-ts="${offs[0].last_seen_at}">${monRel(offs[0].last_seen_at)}</span></div>`;
-    else if(att)    st = `<div class="c">${att} com atenção</div>`;
-    else if(nil && nil===h.bs.length) st = `<div class="c">aguardando 1º sinal</div>`;
-    else            st = `<div class="c">tudo certo</div>`;
-    const alvo = offs.length ? offs[offs.length-1].id : '';
-    return `<div class="mon-card" onclick="monAbrirCard('${alvo}')"><div class="n">${esc(h.nome)}</div><div class="dots">${dots}</div>${st}</div>`;
-  }).join('');
+  const linhaOn = c=>{
+    const ev = MON.voltas && MON.voltas[c.id];
+    let t;
+    if(!MON.voltas)               t = '<span class="mon-t mut">online</span>';
+    else if(!ev)                  t = '<span class="mon-t mut">sem queda registrada</span>';
+    else if(ev.tipo === 'voltou') t = `<span class="mon-t">online <span data-ts="${ev.quando}">${monRel(ev.quando)}</span></span>`;
+    else                          t = '<span class="mon-t">voltou há instantes</span>';   // a rotina de 1 min ainda não registrou a volta
+    const att = monAtencao(c, vMax) ? '<span class="mon-tag">atenção</span>' : '';
+    return `<div class="mon-li" onclick="monAba('on')"><i class="mon-dot on-dot"></i><div class="nm">${nome(c)}${att}</div>${t}</div>`;
+  };
+  const linhaOff = c=>
+    `<div class="mon-li" onclick="monAbrirCard('${c.id}')"><i class="mon-dot off-dot"></i><div class="nm">${nome(c)}</div>
+       <span class="mon-t bad">offline <span data-ts="${c.last_seen_at}">${monRel(c.last_seen_at)}</span></span></div>`;
 
+  const colOn  = g.on.slice().sort(ordem).map(linhaOn).join('')  || '<div class="mon-muted" style="padding:12px 0">Nenhum box online</div>';
+  const colOff = g.off.map(linhaOff).join('')                     || '<div class="mon-muted" style="padding:12px 0">Nenhum box offline</div>';
   const aviso = g.nunca.length
     ? `<div class="mon-nil">${g.nunca.length} canal(is) ainda sem 1º sinal, fora das contagens: ${g.nunca.map(c=>esc(c.nome)).join(', ')}</div>` : '';
-  return kpis + flt + (cards ? `<div class="mon-grid">${cards}</div>` : '<div class="empty"><b>Nenhum box neste filtro</b></div>') + aviso;
+  return kpis + `<div class="mon-split">
+      <div class="mon-col"><div class="mon-colh"><i class="mon-dot on-dot"></i>Online<span class="n">${g.on.length}</span></div>${colOn}</div>
+      <div class="mon-div"></div>
+      <div class="mon-col"><div class="mon-colh"><i class="mon-dot off-dot"></i>Offline<span class="n">${g.off.length}</span></div>${colOff}</div>
+    </div>` + aviso;
 }
 
 /* ---- online ---- */
@@ -1931,7 +1943,6 @@ function monDraw(){
   if(sub) sub.innerHTML = (g.on.length+g.off.length)+' boxes · atualizado <span data-ts="'+MON.atual+'">'+monRel(MON.atual)+'</span>';
 }
 function monAba(t){ if(t === 'off') MON.sel = null; MON.tab = t; monDraw(); }   // aba Offline sempre abre mostrando todos
-function monFiltro(f){ MON.fil = f; monDraw(); }
 function monSel(id){ MON.sel = (id && MON.sel === id) ? null : id; monDraw(); }   // clicar de novo desmarca
 function monAbrirCard(id){ if(id){ MON.sel = id; MON.tab = 'off'; } else { MON.tab = 'on'; } monDraw(); }
 function monTelaCheia(){ const r = document.getElementById('monRoot'); if(r && r.requestFullscreen) r.requestFullscreen(); }
