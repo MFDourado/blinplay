@@ -191,6 +191,8 @@
   .mon-card .c{font-size:12px;color:var(--mut)}
   .mon-card .c.bad{color:var(--off)}
   .mon-nil{color:var(--mut);font-size:12px;margin-top:16px}
+  .mon-row{cursor:pointer}
+  .mon-row:hover td{background:var(--surf2)}
   .mon-stale{border:1px solid var(--line2);border-left:3px solid var(--off);border-radius:var(--rs);padding:9px 14px;margin:0 0 16px;font-size:13px}
   .mon-chips{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 22px}
   .mon-chip{background:none;border:1px solid var(--line);border-radius:999px;padding:6px 14px;color:var(--mut);
@@ -656,7 +658,7 @@ function escJ(v){
    Existe porque, sem ela, não há como saber qual index.html está publicado —
    e subir um arquivo antigo por engano é indistinguível de um recurso que
    não funcionou. */
-const PAINEL_VERSAO = 'v2.8';
+const PAINEL_VERSAO = 'v2.9';
 console.log('[BlinPlay] painel', PAINEL_VERSAO);
 
 /* ---------------- NAVEGAÇÃO ---------------- */
@@ -1597,7 +1599,7 @@ function buildNav(){
     if(item.sec){ const s=document.createElement('div');s.className='nav-sec';s.textContent=item.sec;el.appendChild(s);return;}
     const b=document.createElement('button'); b.className='nav'+(item.k===CUR?' active':'');
     b.innerHTML=`<span class="ic">${item.ic}</span> ${item.label}`;
-    b.onclick=()=>{CUR=item.k;PROG_CH=null;buildNav();render();fecharMenuMobile();}; el.appendChild(b);
+    b.onclick=()=>{CUR=item.k;PROG_CH=null;if(item.k==='monitor') MON.sel=null;buildNav();render();fecharMenuMobile();}; el.appendChild(b);
   });
   // gerente de rede: botão pra trocar de hotel + visão geral de todas as unidades
   if(ROLE==='cli' && CLI_ACCS.length>1){
@@ -1837,8 +1839,22 @@ function monPadrao(quedas){
 }
 function monOffHTML(g){
   if(!g.off.length) return '<div class="empty"><b>Nenhum box offline</b>Tudo certo por aqui.</div>';
-  if(!MON.sel || !g.off.find(c=>c.id===MON.sel)) MON.sel = g.off[0].id;
-  const chips = `<div class="mon-chips">${g.off.map(c=>
+  // se o box selecionado voltou a ficar online, volta para a lista
+  if(MON.sel && !g.off.find(c=>c.id===MON.sel)) MON.sel = null;
+
+  // nenhum selecionado: lista com TODOS os offline (clique numa linha para ver o detalhe)
+  if(!MON.sel){
+    const rows = g.off.map(c=>`<tr class="mon-row" onclick="monSel('${c.id}')">
+      <td><div class="est-name">${esc(monHotel(c))}</div><div class="est-sub">${esc(c.nome)}</div></td>
+      <td><span data-ts="${c.last_seen_at}">${monRel(c.last_seen_at)}</span></td>
+      <td style="color:var(--mut)">${dataHoraBR(c.last_seen_at)}</td>
+      <td style="color:var(--mut)">${esc(c.ultimo_ip||'—')}</td></tr>`).join('');
+    return `<div class="mon-muted" style="margin:0 0 12px">${g.off.length} box(es) offline · clique em um para ver o detalhe</div>
+      <div class="panel"><table><thead><tr><th>Box</th><th>Offline</th><th>Último sinal</th><th>Último IP</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+
+  // um selecionado: botão "todos", troca rápida entre os offline e o detalhe
+  const chips = `<div class="mon-chips"><button class="mon-chip" onclick="monSel(null)">← Todos (${g.off.length})</button>${g.off.map(c=>
     `<button class="mon-chip${c.id===MON.sel?' on':''}" onclick="monSel('${c.id}')">${esc(monHotel(c))} · ${esc(c.nome)}</button>`).join('')}</div>`;
   return chips + monDetalheHTML(g.off.find(c=>c.id===MON.sel), g);
 }
@@ -1914,9 +1930,9 @@ function monDraw(){
   const sub = document.getElementById('monSub');
   if(sub) sub.innerHTML = (g.on.length+g.off.length)+' boxes · atualizado <span data-ts="'+MON.atual+'">'+monRel(MON.atual)+'</span>';
 }
-function monAba(t){ MON.tab = t; monDraw(); }
+function monAba(t){ if(t === 'off') MON.sel = null; MON.tab = t; monDraw(); }   // aba Offline sempre abre mostrando todos
 function monFiltro(f){ MON.fil = f; monDraw(); }
-function monSel(id){ MON.sel = id; monDraw(); }
+function monSel(id){ MON.sel = (id && MON.sel === id) ? null : id; monDraw(); }   // clicar de novo desmarca
 function monAbrirCard(id){ if(id){ MON.sel = id; MON.tab = 'off'; } else { MON.tab = 'on'; } monDraw(); }
 function monTelaCheia(){ const r = document.getElementById('monRoot'); if(r && r.requestFullscreen) r.requestFullscreen(); }
 function monCopiar(id){
