@@ -36,7 +36,7 @@
         + 'não carregou. Verifique a conexão e recarregue a página.</p></div>';
       return;
     }
-    sb = window.supabase.createClient(SB_URL, SB_KEY);
+    sb = window.supabase.createClient(SB_URL, SB_KEY, { global: { fetch: (...a)=> fetchRastreado(...a) } });
     aplicarTema(document.documentElement.dataset.theme === 'light' ? 'light' : 'dark');
     // detecta retorno de convite (link do e-mail traz #access_token=...&type=invite|recovery)
     const h = window.location.hash || '';
@@ -129,7 +129,10 @@
   .side .logo b{font-size:21px}
   .role-pill{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:700;
     padding:4px 9px;border-radius:20px;margin:0 10px 16px;width:fit-content;max-width:calc(100% - 20px);letter-spacing:.05em;text-transform:uppercase}
-  .pill-cnpj{font-weight:600;opacity:.7;letter-spacing:.02em;font-size:9.5px}
+  .pill-cnpj{font-weight:600;opacity:.75;letter-spacing:.02em;font-size:10px;display:block;white-space:nowrap}
+  .role-pill.role-cli{flex-direction:column;align-items:flex-start;gap:2px;border-radius:12px;padding:6px 12px}
+  .role-pill .pill-nome{white-space:normal;line-height:1.3}
+  .role-pill .pill-cnpj{padding-left:1.15em}
   .role-admin{background:var(--gold-soft);color:var(--gold);border:1px solid rgba(245,168,0,.3)}
   .role-cli{background:rgba(90,169,255,.12);color:var(--info);border:1px solid rgba(90,169,255,.3)}
   .nav-sec{font-size:10px;color:var(--mut2);text-transform:uppercase;letter-spacing:.12em;padding:14px 10px 6px}
@@ -457,7 +460,7 @@
   .hotel-pick{display:flex;flex-direction:column;gap:3px;align-items:flex-start;text-align:left;background:var(--input-bg);border:1px solid var(--line);border-radius:var(--rs);padding:13px 15px;transition:.13s;width:100%}
   .hotel-pick:hover{border-color:var(--gold);background:var(--gold-soft)}
   .hp-nome{font-family:'Saira';font-weight:700;font-size:15px;color:var(--txt)}
-  .hp-cnpj{font-size:11.5px;color:var(--mut)}
+  .hp-cnpj{font-size:11.5px;color:var(--mut);white-space:nowrap}
   @media(max-width:820px){.prog-grid{grid-template-columns:1fr}}
   /* ===== AGENDA (calendário de campanhas) ===== */
   .ag-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap}
@@ -590,7 +593,7 @@ function ligarAutoRefresh(){
     // O Monitoramento tem o próprio ciclo de 15 s.
     const f = document.activeElement;
     const digitando = !!f && (/^(INPUT|TEXTAREA|SELECT)$/.test(f.tagName) || f.isContentEditable);
-    if(!modalAberto && !digitando && AUTO_RENDER.indexOf(CUR) !== -1) render();
+    if(!modalAberto && !digitando && AUTO_RENDER.indexOf(CUR) !== -1) render(true);
   }, 60000);
 }
 
@@ -696,7 +699,7 @@ function escJ(v){
    Existe porque, sem ela, não há como saber qual index.html está publicado —
    e subir um arquivo antigo por engano é indistinguível de um recurso que
    não funcionou. */
-const PAINEL_VERSAO = 'v3.2';
+const PAINEL_VERSAO = 'v3.3';
 console.log('[BlinPlay] painel', PAINEL_VERSAO);
 
 /* ---------------- NAVEGAÇÃO ---------------- */
@@ -1134,7 +1137,7 @@ function montarPainelRelatorio(){
     return `<tr><td>${esc(c.canal)}</td>${extras}<td>${c.dias_online}</td><td>${c.dias_total-c.dias_online}</td><td>${c.dias_total}</td></tr>`;
   }).join('') : `<tr><td colspan="${4+colunasAtivas.length}"><div class="empty"><b>Sem dados nesse período</b></div></td></tr>`;
 
-  const cnpjLinha = (REL_COLS_VISIVEIS.cnpj && contaCnpj) ? `<div style="color:var(--mut);font-size:12.5px;margin-top:2px">CNPJ: ${esc(contaCnpj)}</div>` : '';
+  const cnpjLinha = (REL_COLS_VISIVEIS.cnpj && contaCnpj) ? `<div style="color:var(--mut);font-size:12.5px;margin-top:2px;white-space:nowrap">CNPJ: ${esc(contaCnpj)}</div>` : '';
 
   return `<div class="panel"><div class="panel-h"><div><h3>${esc(contaNome||'')}</h3>${cnpjLinha}</div><span class="hint">${esc(inicio)} a ${esc(fim)}</span></div>
     <div style="padding:16px 20px;display:flex;gap:24px;flex-wrap:wrap">
@@ -1443,7 +1446,7 @@ function enter(role){
   } else {
     const nomeConta = CLI_ACC && CLI_ACC.nome ? CLI_ACC.nome : 'Cliente';
     const cnpjConta = CLI_ACC && CLI_ACC.cnpj ? CLI_ACC.cnpj : '';
-    pill.innerHTML = '● '+esc(nomeConta) + (cnpjConta?` <span class="pill-cnpj">${esc(cnpjConta)}</span>`:'');
+    pill.innerHTML = '<span class="pill-nome">● '+esc(nomeConta)+'</span>' + (cnpjConta?`<span class="pill-cnpj">${esc(cnpjConta)}</span>`:'');
   }
   buildNav(); render();
   ligarAutoRefresh();
@@ -1654,12 +1657,25 @@ function buildNav(){
 
 /* ---------------- VIEWS ---------------- */
 let RENDER_TOKEN = 0;
-async function render(){
+let VIEW_ULTIMO = { chave:null, html:'' };
+/* Anota a hora da última falha de rede (ou de servidor, HTTP 5xx). Várias telas, quando a
+   consulta falha, desenham "vazio" em vez de dar erro. Na atualização silenciosa isso trocaria
+   uma tela boa por uma vazia numa simples oscilação de internet; com esta marca, ela descarta. */
+let ULTIMA_FALHA_REDE = 0;
+async function fetchRastreado(...a){
+  try{ const r = await fetch(...a); if(r.status >= 500) ULTIMA_FALHA_REDE = Date.now(); return r; }
+  catch(e){ ULTIMA_FALHA_REDE = Date.now(); throw e; }
+}
+/* render(true) = atualização silenciosa (auto-refresh): não limpa a tela, não mostra
+   "Carregando…", só troca o conteúdo se algo mudou e mantém a rolagem. Falha de rede
+   numa atualização silenciosa é ignorada (a tela atual continua valendo). */
+async function render(silencioso){
+  const quieto = silencioso === true;
   // fecha qualquer modal (e o timer dele, tipo o de "Ver tela") que
   // tenha ficado aberto de uma navegação anterior — sem isso, sair de
   // "Ver tela" clicando direto num item do menu deixava aquele timer
   // rodando pra sempre em segundo plano, acumulando lentidão com o uso.
-  fecharModal();
+  if(!quieto) fecharModal();
   const view=document.getElementById('view');
   const fn=VIEWS[CUR]||(()=>'<p>—</p>');
   /* M6 — dois cliques rápidos na navegação disputavam: quem terminasse a
@@ -1667,16 +1683,22 @@ async function render(){
      olhando. O token descarta o resultado de uma renderização superada. */
   const meu = ++RENDER_TOKEN;
   const alvo = CUR;
-  view.innerHTML='<div class="loading">Carregando…</div>';
+  const t0 = Date.now();
+  if(!quieto) view.innerHTML='<div class="loading">Carregando…</div>';
   try{
     const html = await fn();
     if(meu !== RENDER_TOKEN || alvo !== CUR) return;   // superada
+    if(quieto && ULTIMA_FALHA_REDE >= t0) return;   // alguma consulta falhou agora: mantém a tela boa que já está aí
+    if(quieto && VIEW_ULTIMO.chave === alvo && VIEW_ULTIMO.html === html) return;   // nada mudou: não mexe na tela
+    const y = window.scrollY;
     view.innerHTML = html;
+    VIEW_ULTIMO = { chave: alvo, html };
+    if(quieto) window.scrollTo(0, y);
     // a busca de cliente atualiza #cliList via JS puro (sem re-render),
     // pra digitar não fazer o campo de texto perder o foco a cada letra
     if(alvo==='clientes') renderListaClientes(MIDIA_CLI_BUSCA);
   }
-  catch(e){ view.innerHTML='<div class="note" style="background:rgba(244,96,107,.1);border-color:rgba(244,96,107,.3);color:#ffb3ba">Erro ao carregar: '+esc(e.message||e)+'</div>'; }
+  catch(e){ if(quieto) return; view.innerHTML='<div class="note" style="background:rgba(244,96,107,.1);border-color:rgba(244,96,107,.3);color:#ffb3ba">Erro ao carregar: '+esc(e.message||e)+'</div>'; }
 }
 
 function topbar(title,sub,actions=''){return `<div class="top"><div><h1>${title}</h1><div class="sub">${sub}</div></div><div class="top-actions">${actions}</div></div>`;}
@@ -1863,7 +1885,7 @@ async function monCarregarHist(id){
   const { data, error } = await sb.from('eventos_conexao').select('tipo,quando,ip')
     .eq('channel_id', id).gte('quando', desde).order('quando', { ascending:true });
   MON.hist[id] = error ? { erro:true, em:Date.now() } : { ev:data||[], em:Date.now() };
-  monDraw();
+  monDraw(true);
 }
 function monQuedas(ev){
   const out = []; let aberta = null;
@@ -1969,14 +1991,28 @@ function monAlerta(){
     ? '<div class="mon-stale"><b>Dados desatualizados</b> · última atualização há '+monDur(idade)+'. Confira a internet desta tela; o que aparece abaixo pode não ser o estado atual.</div>'
     : '';
 }
-function monDraw(){
+let MON_ULT = { tabs:'', body:'', n:-1 };
+function monNorm(h){ return h.replace(/data-ts="[^"]*">[^<]*/g, 'data-ts="">'); }   // ignora o texto "há Xs", que corre sozinho
+function monAplicaTs(el, html){                                                   // mantém os horários de referência em dia sem redesenhar
+  const ts = [...html.matchAll(/data-ts="([^"]*)"/g)].map(m=>m[1]);
+  el.querySelectorAll('[data-ts]').forEach((n,i)=>{ if(ts[i] !== undefined) n.dataset.ts = ts[i]; });
+}
+function monDraw(soSeMudou){
   const root = document.getElementById('monRoot'); if(!root) return;
   monAlerta();
   const g = monGrupos();
-  document.getElementById('monTabs').innerHTML = monTabsHTML(g);
-  document.getElementById('monBody').innerHTML = monBodyHTML(g);
+  const t = monTabsHTML(g), b = monBodyHTML(g), tn = monNorm(t), bn = monNorm(b);
+  const elT = document.getElementById('monTabs'), elB = document.getElementById('monBody');
+  if(!soSeMudou || tn !== MON_ULT.tabs) elT.innerHTML = t;
+  if(!soSeMudou || bn !== MON_ULT.body){ elB.innerHTML = b; } else { monAplicaTs(elB, b); }
+  const n = g.on.length + g.off.length;
   const sub = document.getElementById('monSub');
-  if(sub) sub.innerHTML = (g.on.length+g.off.length)+' boxes · atualizado <span data-ts="'+MON.atual+'">'+monRel(MON.atual)+'</span>';
+  if(sub){
+    const sp = sub.querySelector('[data-ts]');
+    if(!soSeMudou || MON_ULT.n !== n || !sp) sub.innerHTML = n+' boxes · atualizado <span data-ts="'+MON.atual+'">'+monRel(MON.atual)+'</span>';
+    else sp.dataset.ts = MON.atual;
+  }
+  MON_ULT = { tabs:tn, body:bn, n };
 }
 function monAba(t){ if(t === 'off') MON.sel = null; MON.tab = t; monDraw(); }   // aba Offline sempre abre mostrando todos
 function monSel(id){ MON.sel = (id && MON.sel === id) ? null : id; monDraw(); }   // clicar de novo desmarca
@@ -1997,7 +2033,7 @@ function monLigarTimers(){
   // busca nova no banco a cada 15 s
   MON.t15 = setInterval(async ()=>{
     if(CUR !== 'monitor' || !document.getElementById('monRoot')){ monDesligar(); return; }
-    try{ await monCarregar(); monDraw(); }catch(e){ /* sem rede: mantém o que está na tela */ }
+    try{ await monCarregar(); monDraw(true); }catch(e){ /* sem rede: mantém o que está na tela */ }
   }, 15000);
   // relógio e "há Xs" correm a cada segundo, sem ir ao banco
   MON.t1 = setInterval(()=>{
@@ -2155,7 +2191,7 @@ function linhaDispositivo(c){
   const nomeEsc = String(c.nome||'').replace(/"/g,'&quot;');
   return `<tr class="row">
     <td><div class="est-name">${esc(hotel)}</div>
-        <div class="est-sub">${esc(cnpj||'sem CNPJ')}</div></td>
+        <div class="est-sub" style="white-space:nowrap">${esc(cnpj||'sem CNPJ')}</div></td>
     <td><div class="est-name" style="font-size:13px">${esc(c.nome||'—')}</div>
         <div class="est-sub">código ${esc(c.codigo_curto||'—')}</div></td>
     <td style="font-family:ui-monospace,monospace;font-size:12px;color:${c.mac_wifi?'var(--txt)':'var(--mut4)'}">
@@ -2491,7 +2527,7 @@ const VIEWS = {
         const nomeEsc = String(a.nome||'').replace(/"/g,'&quot;');
         return `<tr class="row" style="${a.ativo?'':'opacity:.55'}">
           <td class="est-name">${esc(a.nome)}</td>
-          <td style="color:var(--mut)">${esc(a.cnpj)}</td>
+          <td style="color:var(--mut);white-space:nowrap">${esc(a.cnpj)}</td>
           <td><span class="badge ${a.ativo?'live':'done'}">${a.ativo?'Ativa':'Inativa'}</span></td>
           <td><span class="badge ${tipo==='Blincast'?'live':'sched'}">${tipo}</span></td>
           <td style="color:var(--mut)">${n===1 ? '1 canal' : n+' canais'}</td>
