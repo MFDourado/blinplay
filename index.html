@@ -181,6 +181,41 @@
   .mon-dot{width:7px;height:7px;border-radius:50%;display:inline-block;flex:0 0 auto;background:var(--mut2)}
   .mon-dot.on-dot{background:var(--on)} .mon-dot.off-dot{background:var(--off)} .mon-dot.warn-dot{background:var(--gold)}
   .mon-nil{color:var(--mut);font-size:12px;margin-top:22px}
+  /* ---- Minha Programação (cliente) ---- */
+  .cp-acts{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:0 0 24px}
+  .cp-act{display:flex;flex-direction:column;gap:2px;background:var(--surf);border:1px solid var(--line);border-radius:var(--r);
+    padding:13px 16px;color:var(--txt);text-decoration:none;transition:border-color .15s}
+  .cp-act:hover{border-color:var(--line2)}
+  .cp-act b{font-weight:600;font-size:14px}
+  .cp-act span{color:var(--mut);font-size:12px}
+  .cp-act.wa{border-color:rgba(37,211,102,.5)}
+  .cp-chips{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 18px}
+  .cp-chip{background:none;border:1px solid var(--line);border-radius:999px;padding:6px 14px;color:var(--mut);font-size:13px;cursor:pointer;font-family:inherit}
+  .cp-chip.on{color:var(--txt);border-color:var(--line2)}
+  .cp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:26px 36px}
+  .cp-lbl{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut2);margin:0 0 10px;padding-bottom:8px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between}
+  .cp-ch{display:flex;align-items:center;gap:12px;padding:6px 0 12px}
+  .cp-ch .n{font-size:15px;font-weight:600}
+  .cp-ch .s{color:var(--mut);font-size:12.5px}
+  .cp-alert{border-left:2px solid var(--off);padding:4px 0 4px 14px;margin:2px 0 4px;font-size:13px}
+  .cp-alert p{margin:0 0 10px;line-height:1.55}
+  .cp-btn{display:inline-block;background:#25d366;color:#06240f;border-radius:var(--rs);padding:8px 14px;font-size:13px;font-weight:600;text-decoration:none}
+  .cp-pct{display:flex;align-items:baseline;gap:10px;margin:2px 0 10px}
+  .cp-pct b{font-size:30px;font-weight:500;font-variant-numeric:tabular-nums}
+  .cp-bars{display:flex;gap:3px;height:30px}
+  .cp-bars i{flex:1;border-radius:2px;background:var(--on)}
+  .cp-bars i.off{background:var(--off)}
+  .cp-bars i.nil{background:var(--line2)}
+  .cp-axis{display:flex;justify-content:space-between;color:var(--mut2);font-size:11px;margin-top:4px}
+  .cp-tab{border-collapse:collapse;width:100%;font-size:13px}
+  .cp-tab th{text-align:left;color:var(--mut);font-size:11px;font-weight:400;letter-spacing:.05em;text-transform:uppercase;padding:0 8px 8px 0;border-bottom:1px solid var(--line)}
+  .cp-tab td{padding:9px 8px 9px 0;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+  .cp-tab td.o{color:var(--mut);width:42px}
+  .cp-tab td.m{color:var(--mut)}
+  .cp-tot{display:flex;justify-content:space-between;color:var(--mut);font-size:12px;padding-top:10px}
+  .cp-row{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px}
+  .cp-row:last-child{border-bottom:0}
+  .cp-row span:last-child{color:var(--mut);white-space:nowrap}
   .mon-split{display:grid;grid-template-columns:1fr 1px 1fr;gap:0 32px}
   .mon-div{background:var(--line2)}
   .mon-colh{display:flex;align-items:center;gap:9px;font-size:15px;padding:0 0 10px;border-bottom:1px solid var(--line)}
@@ -540,7 +575,7 @@ function estaOnline(ts){
    anterior — quem estava online e virou offline dispara um banner; (2)
    re-renderiza a tela atual, MAS pula esse passo se tiver um modal aberto,
    pra não fechar uma edição em andamento embaixo do usuário. */
-const AUTO_RENDER = ['overview','estacoes','dispositivos','cli_overview','cli_canais'];
+const AUTO_RENDER = ['overview','estacoes','dispositivos','cli_overview','cli_canais','cli_prog'];
 let AUTOREFRESH_TIMER = null;
 let PRESENCA_ANTERIOR = null;   // null = primeira leitura: só estabelece a base, não avisa
 
@@ -661,7 +696,7 @@ function escJ(v){
    Existe porque, sem ela, não há como saber qual index.html está publicado —
    e subir um arquivo antigo por engano é indistinguível de um recurso que
    não funcionou. */
-const PAINEL_VERSAO = 'v3.0';
+const PAINEL_VERSAO = 'v3.1';
 console.log('[BlinPlay] painel', PAINEL_VERSAO);
 
 /* ---------------- NAVEGAÇÃO ---------------- */
@@ -1581,6 +1616,7 @@ async function logout(){
   monDesligar();
   MON = { chs:[], tab:'pan', sel:null, hist:{}, voltas:null, voltasEm:0, t15:null, t1:null, atual:null };
   DV_CHS = []; DV_BUSCA = '';
+  CLI_PROG = { sel:null, chs:[], meds:[], itens:[], camps:[], widgets:[], disp:{} };
   EST_CHS = []; EST_NPL = {}; REL_ULTIMO = null; WG_ACCS = []; REL_ACCS = [];
   const bn = document.getElementById('bannerOffline'); if(bn) bn.remove();
   try{ if(document.fullscreenElement) document.exitFullscreen(); }catch(e){}
@@ -1971,6 +2007,139 @@ function monLigarTimers(){
     const clk = document.getElementById('monClk');
     if(clk) clk.textContent = new Date().toLocaleString('pt-BR', { timeZone:'America/Sao_Paulo' });
   }, 1000);
+}
+
+/* ---------------- MINHA PROGRAMAÇÃO (cliente) ----------------
+   Tela inicial do cliente: canais e status, disponibilidade, o que toca (ordem de
+   passagem), campanhas e resumo do conteúdo. Nada técnico (IP, MAC, diagnóstico). */
+const SUPORTE_WA = '5521971471125', SUPORTE_WA_TXT = '+55 21 97147-1125';
+let CLI_PROG = { sel:null, chs:[], meds:[], itens:[], camps:[], widgets:[], disp:{} };
+
+function hojeBR(){ return new Date().toLocaleDateString('en-CA', { timeZone:'America/Sao_Paulo' }); }   // AAAA-MM-DD
+function somaDias(iso, n){ const d = new Date(iso+'T12:00:00Z'); d.setUTCDate(d.getUTCDate()+n); return d.toISOString().slice(0,10); }
+function diasEntre(a, b){ return Math.round((new Date(b+'T12:00:00Z') - new Date(a+'T12:00:00Z'))/86400000); }
+function cpDM(iso){ return String(iso).slice(8,10)+'/'+String(iso).slice(5,7); }
+function cpPct(ok, tot){ if(!tot) return '—'; const v = Math.round(1000*ok/tot)/10; return String(v).replace('.',',')+'%'; }
+function cpWA(texto){ return 'https://wa.me/'+SUPORTE_WA+'?text='+encodeURIComponent(texto); }
+function cliIr(k){ CUR = k; buildNav(); render(); fecharMenuMobile(); }
+
+async function cpCarregar(){
+  const acc = CLI_ACC.id, hoje = hojeBR(), ini = somaDias(hoje, -29);
+  const [rc, rm, rcp, rw] = await Promise.all([
+    sb.from('channels').select('id,nome,last_seen_at').eq('account_id', acc).eq('ativo', true).order('created_at'),
+    sb.from('media').select('id,nome,tipo,duracao_seg,created_at').eq('account_id', acc),
+    sb.from('campaigns').select('id,nome,ativo,data_inicio,data_fim').eq('account_id', acc),
+    sb.from('account_widgets').select('tipo,ativo').eq('account_id', acc).eq('ativo', true)
+  ]);
+  CLI_PROG.chs = rc.data || []; CLI_PROG.meds = rm.data || []; CLI_PROG.camps = rcp.data || []; CLI_PROG.widgets = rw.data || [];
+  const ids = CLI_PROG.chs.map(c=>c.id);
+  CLI_PROG.itens = [];
+  if(ids.length){
+    const r = await sb.from('playlist_items').select('channel_id,media_id,posicao,duracao_override')
+      .in('channel_id', ids).eq('ativo', true).order('posicao');
+    CLI_PROG.itens = r.data || [];
+  }
+  // disponibilidade: o relatório (que o cliente já pode usar) dá o total; a tabela diária, se liberada, dá a barrinha
+  let rpcRows = [], diario = null;
+  try{ const r = await sb.rpc('relatorio_canais', { p_account_id: acc, p_inicio: ini, p_fim: hoje }); if(!r.error) rpcRows = r.data || []; }catch(e){}
+  if(ids.length){
+    try{ const r = await sb.from('channel_daily_status').select('channel_id,dia,online').in('channel_id', ids).gte('dia', ini);
+         if(!r.error) diario = r.data || []; }catch(e){}
+  }
+  CLI_PROG.disp = {};
+  CLI_PROG.chs.forEach(c=>{
+    const linhas = diario ? diario.filter(x=>x.channel_id===c.id) : [];
+    if(linhas.length){
+      const ok = linhas.filter(x=>x.online).length;
+      CLI_PROG.disp[c.id] = { ok, tot: linhas.length, mapa: Object.fromEntries(linhas.map(x=>[String(x.dia).slice(0,10), !!x.online])) };
+    } else {
+      const r = rpcRows.find(x=>x.channel_id===c.id);
+      if(r && r.dias_total) CLI_PROG.disp[c.id] = { ok: r.dias_online, tot: r.dias_total, mapa: null };
+    }
+  });
+  if(!CLI_PROG.sel || !CLI_PROG.chs.find(c=>c.id===CLI_PROG.sel)) CLI_PROG.sel = CLI_PROG.chs[0] ? CLI_PROG.chs[0].id : null;
+}
+
+function cpHTMLChips(){
+  if(CLI_PROG.chs.length < 2) return '';
+  return '<div class="cp-chips">'+CLI_PROG.chs.map(c=>
+    `<button class="cp-chip${c.id===CLI_PROG.sel?' on':''}" onclick="cliProgSel('${c.id}')">${esc(c.nome)}</button>`).join('')+'</div>';
+}
+function cpHTMLCanais(){
+  if(!CLI_PROG.chs.length) return '<div class="mon-muted">Nenhum canal ativo ainda. A Blincast instala e configura seus canais.</div>';
+  const quando = ts => { const q = monQuando(ts).split(' '); return q[0]+' às '+q[1]; };
+  let off = null;
+  const linhas = CLI_PROG.chs.map(c=>{
+    const on = estaOnline(c.last_seen_at);
+    if(!on && c.last_seen_at && !off) off = c;
+    const st = !c.last_seen_at ? 'Ainda não conectou'
+      : on ? 'Online agora · última conexão '+monRel(c.last_seen_at)
+           : 'Sem conexão há '+monDur(Date.now()-new Date(c.last_seen_at).getTime())+' · última conexão em '+quando(c.last_seen_at);
+    return `<div class="cp-ch"><i class="mon-dot ${on?'on-dot':(c.last_seen_at?'off-dot':'')}"></i><div><div class="n">${esc(c.nome)}</div><div class="s">${st}</div></div></div>`;
+  }).join('');
+  const aviso = off ? `<div class="cp-alert"><p>Seu canal está sem conexão com a internet. Se o box estiver ligado, ele segue exibindo a programação que já está salva, mas não recebe mídias nem alterações novas até a conexão voltar. Confira o cabo ou o Wi-Fi do box. Se continuar assim, chame o suporte.</p>
+      <a class="cp-btn" href="${cpWA('Olá, meu canal '+off.nome+' ('+CLI_ACC.nome+') está sem conexão.')}" target="_blank" rel="noopener">Chamar no WhatsApp</a></div>` : '';
+  return linhas + aviso;
+}
+function cpHTMLDisp(){
+  const c = CLI_PROG.chs.find(x=>x.id===CLI_PROG.sel); if(!c) return '';
+  const d = CLI_PROG.disp[c.id];
+  if(!d) return '<div class="mon-muted">Ainda não há dados de disponibilidade para este canal.</div>';
+  let barras = '';
+  if(d.mapa){
+    const ini = somaDias(hojeBR(), -29);
+    for(let i=0; i<30; i++){
+      const dia = somaDias(ini, i), v = d.mapa[dia];
+      barras += `<i class="${v===undefined?'nil':(v?'':'off')}" title="${cpDM(dia)}: ${v===undefined?'sem registro':(v?'online':'sem conexão')}"></i>`;
+    }
+    barras = `<div class="cp-bars">${barras}</div><div class="cp-axis"><span>há 30 dias</span><span>hoje</span></div>`;
+  }
+  return `<div class="cp-pct"><b>${cpPct(d.ok, d.tot)}</b><span class="mon-muted">${d.ok} de ${d.tot} dias online</span></div>${barras}`;
+}
+function cpHTMLLista(){
+  const c = CLI_PROG.chs.find(x=>x.id===CLI_PROG.sel); if(!c) return '';
+  const porId = Object.fromEntries(CLI_PROG.meds.map(m=>[m.id, m]));
+  const itens = CLI_PROG.itens.filter(i=>i.channel_id===c.id).sort((a,b)=>a.posicao-b.posicao);
+  if(!itens.length) return '<div class="mon-muted">Nenhuma mídia na programação deste canal ainda. Use “Montar programação”.</div>';
+  let total = 0, incompleto = false;
+  const rows = itens.map((i,k)=>{
+    const m = porId[i.media_id] || { nome:'(mídia removida)', tipo:'' };
+    const dur = i.duracao_override != null ? i.duracao_override : m.duracao_seg;
+    if(dur) total += parseInt(dur,10); else incompleto = true;
+    return `<tr><td class="o">${k+1}</td><td>${esc(m.nome)}</td><td class="m">${m.tipo==='video'?'Vídeo':(m.tipo?'Imagem':'—')}</td><td class="m">${fmtDur(dur)}</td></tr>`;
+  }).join('');
+  const tt = total >= 60 ? Math.floor(total/60)+' min '+(total%60)+' s' : total+' s';
+  return `<table class="cp-tab"><thead><tr><th>Ordem</th><th>Arquivo</th><th>Tipo</th><th>Duração</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="cp-tot"><span>Tempo de um ciclo completo</span><span>${tt}${incompleto?' ou mais':''}</span></div>`;
+}
+function cpHTMLCampanhas(){
+  const hoje = hojeBR(), cs = CLI_PROG.camps;
+  const ativas = cs.filter(c=>c.ativo && hoje>=c.data_inicio && hoje<=c.data_fim);
+  const prox = cs.filter(c=>c.ativo && c.data_inicio>hoje).sort((a,b)=> a.data_inicio<b.data_inicio?-1:1)[0];
+  const ult = cs.filter(c=>c.data_fim<hoje).sort((a,b)=> a.data_fim<b.data_fim?1:-1)[0];
+  const linha = (a,b)=>`<div class="cp-row"><span>${a}</span><span>${b}</span></div>`;
+  let h = ativas.length ? ativas.map(c=>linha(esc(c.nome), 'no ar · até '+cpDM(c.data_fim))).join('') : linha('Nenhuma campanha no ar agora','');
+  if(prox) h += linha('Próxima: '+esc(prox.nome), 'começa em '+cpDM(prox.data_inicio)+' · em '+diasEntre(hoje, prox.data_inicio)+' dias');
+  if(ult)  h += linha('Última: '+esc(ult.nome), 'terminou em '+cpDM(ult.data_fim));
+  if(!cs.length) h = linha('Nenhuma campanha criada ainda','');
+  return h;
+}
+function cpHTMLResumo(){
+  const meds = CLI_PROG.meds;
+  const im = meds.filter(m=>m.tipo==='image').length, vd = meds.filter(m=>m.tipo==='video').length;
+  const ult = meds.map(m=>m.created_at).filter(Boolean).sort().pop();
+  const nomes = CLI_PROG.widgets.map(w=>{ const d = WIDGET_DEFS.find(x=>x.tipo===w.tipo); return d ? d.nome : w.tipo; });
+  const linha = (a,b)=>`<div class="cp-row"><span>${a}</span><span>${b}</span></div>`;
+  return linha('Tipos de mídia', im+(im===1?' imagem':' imagens')+' · '+vd+(vd===1?' vídeo':' vídeos'))
+       + linha('Última mídia enviada', ult ? new Date(ult).toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'}) : '—')
+       + linha('Widgets ativos', nomes.length ? esc(nomes.join(' · ')) : 'Nenhum');
+}
+function cliProgSel(id){
+  CLI_PROG.sel = id;
+  const set = (i,h)=>{ const e = document.getElementById(i); if(e) e.innerHTML = h; };
+  const sel = CLI_PROG.chs.find(c=>c.id===id);
+  set('cpLblLista', 'O que toca'+(sel?' no canal '+esc(sel.nome):''));
+  set('cpChips', cpHTMLChips()); set('cpDisp', cpHTMLDisp()); set('cpLista', cpHTMLLista());
 }
 
 let DV_CHS = [];          // guarda os dispositivos já buscados, pra filtrar sem refetch
@@ -2397,23 +2566,36 @@ const VIEWS = {
   /* ===== CLIENTE ===== */
   async cli_prog(){
     if(!CLI_ACC) return '<div class="note">Sessão sem hotel selecionado.</div>';
-    const acc=CLI_ACC.id;
-    const [{data:chs},{data:meds},{data:camps}] = await Promise.all([
-      sb.from('channels').select('id,nome,last_seen_at').eq('account_id',acc).eq('ativo',true),
-      sb.from('media').select('id').eq('account_id',acc),
-      sb.from('campaigns').select('id,ativo,data_inicio,data_fim').eq('account_id',acc)
-    ]);
-    const hoje=new Date().toISOString().slice(0,10);
-    const online=(chs||[]).filter(c=>estaOnline(c.last_seen_at)).length;
-    const ativas=(camps||[]).filter(c=>c.ativo && hoje>=c.data_inicio && hoje<=c.data_fim).length;
-    return topbar('Minha Programação', CLI_ACC.nome+' · visão geral')
+    await cpCarregar();
+    const chs = CLI_PROG.chs, hoje = hojeBR();
+    const online = chs.filter(c=>estaOnline(c.last_seen_at)).length;
+    const ativas = CLI_PROG.camps.filter(c=>c.ativo && hoje>=c.data_inicio && hoje<=c.data_fim).length;
+    const canalSel = chs.find(c=>c.id===CLI_PROG.sel);
+    return topbar('Minha Programação', esc(CLI_ACC.nome)+' · visão geral')
     +`<div class="kpis">
-        <div class="kpi"><div class="lab">Meus canais</div><div class="val">${(chs||[]).length}</div></div>
-        <div class="kpi"><div class="lab">Online</div><div class="val" style="color:var(--on)">${online}<small>/${(chs||[]).length}</small></div></div>
-        <div class="kpi"><div class="lab">Mídias</div><div class="val">${(meds||[]).length}</div></div>
+        <div class="kpi"><div class="lab">Meus canais</div><div class="val">${chs.length}</div></div>
+        <div class="kpi"><div class="lab">Online</div><div class="val" style="color:var(--on)">${online}<small>/${chs.length}</small></div></div>
+        <div class="kpi"><div class="lab">Mídias</div><div class="val">${CLI_PROG.meds.length}</div></div>
         <div class="kpi"><div class="lab">Campanhas no ar</div><div class="val" style="color:var(--gold)">${ativas}</div></div>
       </div>
-      <div class="note">💡 <div>Use <b>Minha Mídia</b> para enviar conteúdo, <b>Programação</b> para montar o que toca e <b>Campanhas</b> para conteúdo temporário com data.</div></div>`;
+      <div class="cp-acts">
+        <a class="cp-act" href="#" onclick="cliIr('cli_midia');return false"><b>Enviar mídia</b><span>Subir fotos e vídeos</span></a>
+        <a class="cp-act" href="#" onclick="cliIr('prog');return false"><b>Montar programação</b><span>Definir o que toca e a ordem</span></a>
+        <a class="cp-act" href="#" onclick="cliIr('cli_camp');return false"><b>Nova campanha</b><span>Conteúdo temporário com data</span></a>
+        <a class="cp-act wa" href="${cpWA('Olá, preciso de ajuda com o meu canal BlinPlay ('+CLI_ACC.nome+').')}" target="_blank" rel="noopener"><b>Falar com o suporte</b><span>WhatsApp · ${SUPORTE_WA_TXT}</span></a>
+      </div>
+      <div id="cpChips">${cpHTMLChips()}</div>
+      <div class="cp-grid">
+        <div>
+          <div class="cp-lbl"><span>Meus canais</span></div>${cpHTMLCanais()}
+          <div class="cp-lbl" style="margin-top:24px"><span>Disponibilidade · últimos 30 dias</span></div><div id="cpDisp">${cpHTMLDisp()}</div>
+        </div>
+        <div>
+          <div class="cp-lbl"><span id="cpLblLista">O que toca${canalSel?' no canal '+esc(canalSel.nome):''}</span></div><div id="cpLista">${cpHTMLLista()}</div>
+        </div>
+        <div><div class="cp-lbl"><span>Campanhas</span></div>${cpHTMLCampanhas()}</div>
+        <div><div class="cp-lbl"><span>Resumo do conteúdo</span></div>${cpHTMLResumo()}</div>
+      </div>`;
   },
   async cli_midia(){
     if(!CLI_ACC) return '';
