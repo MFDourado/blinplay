@@ -696,7 +696,7 @@ function escJ(v){
    Existe porque, sem ela, não há como saber qual index.html está publicado —
    e subir um arquivo antigo por engano é indistinguível de um recurso que
    não funcionou. */
-const PAINEL_VERSAO = 'v3.1';
+const PAINEL_VERSAO = 'v3.2';
 console.log('[BlinPlay] painel', PAINEL_VERSAO);
 
 /* ---------------- NAVEGAÇÃO ---------------- */
@@ -2020,7 +2020,7 @@ function somaDias(iso, n){ const d = new Date(iso+'T12:00:00Z'); d.setUTCDate(d.
 function diasEntre(a, b){ return Math.round((new Date(b+'T12:00:00Z') - new Date(a+'T12:00:00Z'))/86400000); }
 function cpDM(iso){ return String(iso).slice(8,10)+'/'+String(iso).slice(5,7); }
 function cpPct(ok, tot){ if(!tot) return '—'; const v = Math.round(1000*ok/tot)/10; return String(v).replace('.',',')+'%'; }
-function cpWA(texto){ return 'https://wa.me/'+SUPORTE_WA+'?text='+encodeURIComponent(texto); }
+function cpWA(){ return 'https://wa.me/'+SUPORTE_WA+'?text='+encodeURIComponent('Olá, gostaria de um auxílio no canal corporativo do '+CLI_ACC.nome+'.'); }
 function cliIr(k){ CUR = k; buildNav(); render(); fecharMenuMobile(); }
 
 async function cpCarregar(){
@@ -2078,7 +2078,7 @@ function cpHTMLCanais(){
     return `<div class="cp-ch"><i class="mon-dot ${on?'on-dot':(c.last_seen_at?'off-dot':'')}"></i><div><div class="n">${esc(c.nome)}</div><div class="s">${st}</div></div></div>`;
   }).join('');
   const aviso = off ? `<div class="cp-alert"><p>Seu canal está sem conexão com a internet. Se o box estiver ligado, ele segue exibindo a programação que já está salva, mas não recebe mídias nem alterações novas até a conexão voltar. Confira o cabo ou o Wi-Fi do box. Se continuar assim, chame o suporte.</p>
-      <a class="cp-btn" href="${cpWA('Olá, meu canal '+off.nome+' ('+CLI_ACC.nome+') está sem conexão.')}" target="_blank" rel="noopener">Chamar no WhatsApp</a></div>` : '';
+      <a class="cp-btn" href="${cpWA()}" target="_blank" rel="noopener">Chamar no WhatsApp</a></div>` : '';
   return linhas + aviso;
 }
 function cpHTMLDisp(){
@@ -2582,7 +2582,7 @@ const VIEWS = {
         <a class="cp-act" href="#" onclick="cliIr('cli_midia');return false"><b>Enviar mídia</b><span>Subir fotos e vídeos</span></a>
         <a class="cp-act" href="#" onclick="cliIr('prog');return false"><b>Montar programação</b><span>Definir o que toca e a ordem</span></a>
         <a class="cp-act" href="#" onclick="cliIr('cli_camp');return false"><b>Nova campanha</b><span>Conteúdo temporário com data</span></a>
-        <a class="cp-act wa" href="${cpWA('Olá, preciso de ajuda com o meu canal BlinPlay ('+CLI_ACC.nome+').')}" target="_blank" rel="noopener"><b>Falar com o suporte</b><span>WhatsApp · ${SUPORTE_WA_TXT}</span></a>
+        <a class="cp-act wa" href="${cpWA()}" target="_blank" rel="noopener"><b>Falar com o suporte</b><span>WhatsApp · ${SUPORTE_WA_TXT}</span></a>
       </div>
       <div id="cpChips">${cpHTMLChips()}</div>
       <div class="cp-grid">
