@@ -684,22 +684,25 @@ function esc(v){
 function escA(v){
   return esc(v).replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
+/* escJ: para dado que vai DENTRO de um texto JavaScript que mora DENTRO de um atributo HTML
+   (onclick="fn('...')"). Precisa de duas camadas: (1) escapar para JavaScript, para o dado não
+   fechar a string; (2) escapar para HTML, para uma aspa no dado não fechar o ATRIBUTO e criar
+   atributos novos (onmouseover=...). Só a camada 1 deixava os dois furos abertos. */
 function escJ(v){
-  return String(v === null || v === undefined ? '' : v)
+  const js = String(v === null || v === undefined ? '' : v)
     .replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'\\"')
-    .replace(/</g,'\\u003c')
-    /* U+2028 e U+2029 são terminadores de linha para o interpretador
-       JavaScript. Dentro de um handler inline, eles podem encerrar a string
-       e deixar o resto do valor virar código. Só \r\n não bastava. */
+    .replace(/</g,'\\u003c').replace(/>/g,'\\u003e')
+    /* U+2028 e U+2029 são terminadores de linha para o interpretador JavaScript. */
     .replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029')
     .replace(/\r?\n/g,' ');
+  return js.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 /* Versão do painel. Aparece na barra lateral e no console.
    Existe porque, sem ela, não há como saber qual index.html está publicado —
    e subir um arquivo antigo por engano é indistinguível de um recurso que
    não funcionou. */
-const PAINEL_VERSAO = 'v3.3';
+const PAINEL_VERSAO = 'v3.5';
 console.log('[BlinPlay] painel', PAINEL_VERSAO);
 
 /* ---------------- NAVEGAÇÃO ---------------- */
@@ -1395,9 +1398,9 @@ function linhasEstacoes(){
       <td style="white-space:nowrap">
         <button class="mini" onclick="copiarCodigo('${cod}')">⧉ Código</button>
         <button class="mini" onclick="copiarURL('${escJ(url)}')">⧉ URL</button>
-        <button class="mini" onclick='renomearCanal("${c.id}","${escA(c.nome)}")'>✎ Renomear</button>
-        <button class="mini" onclick='alternarCanal("${c.id}","${escA(c.nome)}",${c.ativo?'false':'true'})'>${c.ativo?'⊘ Inativar':'✓ Reativar'}</button>
-        <button class="mini danger" onclick='excluirCanal("${c.id}","${escA(c.nome)}",${EST_NPL[c.id]||0})'>🗑</button>
+        <button class="mini" onclick='renomearCanal("${c.id}","${escJ(c.nome)}")'>✎ Renomear</button>
+        <button class="mini" onclick='alternarCanal("${c.id}","${escJ(c.nome)}",${c.ativo?'false':'true'})'>${c.ativo?'⊘ Inativar':'✓ Reativar'}</button>
+        <button class="mini danger" onclick='excluirCanal("${c.id}","${escJ(c.nome)}",${EST_NPL[c.id]||0})'>🗑</button>
       </td></tr>`;
   }).join('');
 }
@@ -2188,7 +2191,7 @@ function linhaDispositivo(c){
   const pct = (c.storage_total && c.storage_livre != null)
     ? Math.round(100*(c.storage_total-c.storage_livre)/c.storage_total) : null;
   const gb = n => n==null ? '—' : (n/1073741824).toFixed(1)+' GB';
-  const nomeEsc = String(c.nome||'').replace(/"/g,'&quot;');
+  const nomeEsc = escJ(c.nome);
   return `<tr class="row">
     <td><div class="est-name">${esc(hotel)}</div>
         <div class="est-sub" style="white-space:nowrap">${esc(cnpj||'sem CNPJ')}</div></td>
@@ -2426,7 +2429,7 @@ const VIEWS = {
     const medsFiltrados = MIDIA_CLI_SEL ? meds.filter(m=>m.account_id===MIDIA_CLI_SEL) : meds;
     const nomeSel = esc(MIDIA_CLI_SEL ? (MIDIA_CLI_ACCS.find(a=>a.id===MIDIA_CLI_SEL)||{}).nome||'—' : 'Todos os clientes');
 
-    return topbar('Clientes', nomeSel+' · '+medsFiltrados.length+' item(ns)', `<button class="solid" onclick="novaMidia()">⬆ Subir mídia</button>`)
+    return topbar('Clientes', esc(nomeSel)+' · '+medsFiltrados.length+' item(ns)', `<button class="solid" onclick="novaMidia()">⬆ Subir mídia</button>`)
       + `<div class="panel cli-panel">
           <div class="cli-side">
             <div class="cli-search">
@@ -2524,7 +2527,7 @@ const VIEWS = {
       rows = accs.map(a=>{
         const tipo = a.plano==='interno' ? 'Blincast' : 'Cliente';
         const n = canais[a.id] || 0;
-        const nomeEsc = String(a.nome||'').replace(/"/g,'&quot;');
+        const nomeEsc = escJ(a.nome);
         return `<tr class="row" style="${a.ativo?'':'opacity:.55'}">
           <td class="est-name">${esc(a.nome)}</td>
           <td style="color:var(--mut);white-space:nowrap">${esc(a.cnpj)}</td>
@@ -2572,10 +2575,10 @@ const VIEWS = {
         const ativo = p.ativo!==false;
         const hoteis = porUser[p.id] || [];
         const listaH = hoteis.length
-          ? hoteis.slice(0,3).map(h=>'<span style="background:var(--chip-bg);color:var(--mut);font-size:10.5px;padding:2px 7px;border-radius:12px;margin-right:4px">'+h+'</span>').join('')
+          ? hoteis.slice(0,3).map(h=>'<span style="background:var(--chip-bg);color:var(--mut);font-size:10.5px;padding:2px 7px;border-radius:12px;margin-right:4px">'+esc(h)+'</span>').join('')
             + (hoteis.length>3 ? '<span style="color:var(--mut);font-size:10.5px">+'+(hoteis.length-3)+'</span>' : '')
           : '<span style="color:#c00">sem hotel vinculado</span>';
-        const nEsc = String(p.nome||'').replace(/"/g,'&quot;');
+        const nEsc = escJ(p.nome);
         return `<tr class="row" style="${ativo?'':'opacity:.55'}">
           <td><div class="est-name">${esc(p.nome||'—')}</div><div class="est-sub">${esc(p.email||'')}</div></td>
           <td><span class="badge sched">${esc(papelLabel[p.role]||p.role)}</span></td>
@@ -2638,7 +2641,7 @@ const VIEWS = {
     const { data: meds, error } = await sb.from('media')
       .select('id,nome,tipo,storage_path,duracao_seg,tamanho_bytes').eq('account_id',CLI_ACC.id).order('created_at',{ascending:false});
     if(error) throw error;
-    return topbar('Minha Mídia', CLI_ACC.nome+' · '+(meds?meds.length:0)+' item(ns)', `<button class="solid" onclick="novaMidia()">⬆ Subir mídia</button>`)
+    return topbar('Minha Mídia', esc(CLI_ACC.nome)+' · '+(meds?meds.length:0)+' item(ns)', `<button class="solid" onclick="novaMidia()">⬆ Subir mídia</button>`)
       + mediaPanelReal(meds, false);
   },
   async cli_camp(){
@@ -2677,7 +2680,7 @@ const VIEWS = {
         </div>`;
       }).join('');
     }
-    return topbar('Minhas Campanhas', CLI_ACC.nome+' · entra no rodízio no período, sai sozinha quando a data passa', `<button class="solid" onclick="novaCampanha()">＋ Nova campanha</button>`)
+    return topbar('Minhas Campanhas', esc(CLI_ACC.nome)+' · entra no rodízio no período, sai sozinha quando a data passa', `<button class="solid" onclick="novaCampanha()">＋ Nova campanha</button>`)
       + agendaPanel(camps||[])
       + `<div class="panel"><div class="panel-h"><h3>Campanhas</h3><span class="hint">rodízio: padrão · padrão · campanha · padrão…</span></div>${rows}</div>`;
   },
@@ -2701,7 +2704,7 @@ const VIEWS = {
         </tr>`;
       }).join('');
     }
-    return topbar('Meus Canais', CLI_ACC.nome+' · status dos boxes','')
+    return topbar('Meus Canais', esc(CLI_ACC.nome)+' · status dos boxes','')
       +`<div class="panel"><div class="panel-h"><h3>Canais</h3><span class="hint">online = visto nos últimos 5 min</span></div>
         <table><thead><tr><th>Canal</th><th>Status</th><th>Último acesso</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
   },
@@ -2785,7 +2788,7 @@ const VIEWS = {
       : '';
     const botao = rede ? `onclick="gerarRelatorio()"` : `onclick="gerarRelatorio('${CLI_ACC.id}')"`;
 
-    return topbar(rede?'Meus Relatórios':(CLI_ACC?CLI_ACC.nome:'Meu Relatório'), rede?'Escolha a unidade e o período':'')
+    return topbar(rede?'Meus Relatórios':(CLI_ACC?esc(CLI_ACC.nome):'Meu Relatório'), rede?'Escolha a unidade e o período':'')
       + `<div class="panel"><div class="panel-h"><h3>Gerar relatório</h3></div>
           <div style="padding:16px 20px;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
             ${seletorConta}
@@ -2923,7 +2926,7 @@ function agDia(iso){
         <div class="meta">
           <div>Período<b>${di} → ${df}</b></div>
           <div>Frequência<b>1 a cada ${esc(c.frequencia_a_cada)}</b></div>
-          ${hotel?`<div>Hotel<b>${hotel}</b></div>`:''}
+          ${hotel?`<div>Hotel<b>${esc(hotel)}</b></div>`:''}
         </div></div>`;
     }).join('')+'</div>';
   }
@@ -3177,7 +3180,7 @@ async function editarUsuario(id){
   const marcados=(v||[]).map(x=>x.account_id);
   const opts = PAPEIS_OPT.map(([vv,l])=>`<option value="${vv}" ${p.role===vv?'selected':''}>${l}</option>`).join('');
   abrirModal(
-    '<h3>Editar usuário</h3><div class="fsub">'+(p.email||'')+'</div>'+
+    '<h3>Editar usuário</h3><div class="fsub">'+esc(p.email||'')+'</div>'+
     '<div class="fld"><label>Nome</label><input id="gu_nome" value="'+String(p.nome||'').replace(/"/g,'&quot;')+'"></div>'+
     '<div class="fld"><label>Papel</label><select id="gu_role">'+opts+'</select></div>'+
     '<div class="fld"><label>Hotéis com acesso</label><div id="gu_hoteis" class="chk-wrap">carregando…</div></div>'+
@@ -3204,7 +3207,7 @@ async function salvarEdicaoUsuario(id){
 
 function trocarSenha(id, nome){
   abrirModal(
-    '<h3>Trocar senha</h3><div class="fsub">'+nome+'</div>'+
+    '<h3>Trocar senha</h3><div class="fsub">'+esc(nome)+'</div>'+
     '<div class="fld"><label>Nova senha</label><input id="gu_senha" type="password" autocomplete="new-password" placeholder="mínimo 6 caracteres"></div>'+
     '<div style="color:var(--mut);font-size:11.5px">A pessoa passa a usar esta senha imediatamente. '+
       'Sessões abertas continuam válidas até expirarem.</div>'+
@@ -3412,8 +3415,8 @@ function mediaCardsHtml(list, isAdmin){
     const url = SB_PUBLIC_BASE + m.storage_path;
     const isVid = m.tipo==='video';
     const thumb = isVid
-      ? `<video src="${url}#t=0.5" muted preload="metadata" style="width:100%;height:100%;object-fit:cover"></video>`
-      : `<img src="${url}" loading="lazy" style="width:100%;height:100%;object-fit:cover" alt="">`;
+      ? `<video src="${escA(url)}#t=0.5" muted preload="metadata" style="width:100%;height:100%;object-fit:cover"></video>`
+      : `<img src="${escA(url)}" loading="lazy" style="width:100%;height:100%;object-fit:cover" alt="">`;
     const tam = m.tamanho_bytes ? (m.tamanho_bytes/1048576).toFixed(1)+' MB' : '';
     return `<div class="mcard">
       <div class="mthumb" style="background:var(--input-bg);overflow:hidden;padding:0">
@@ -3425,7 +3428,7 @@ function mediaCardsHtml(list, isAdmin){
         <div class="ms">${isVid? fmtDur(m.duracao_seg) : (m.duracao_seg!=null ? m.duracao_seg+'s na tela' : 'imagem')}${tam?' · '+tam:''}${isAdmin&&m.accounts?' · '+esc(m.accounts.nome):''}</div>
         <div class="mactions">
           <button class="mini" onclick="baixarMidia('${escJ(url)}','${escJ(m.nome)}','${escJ(m.storage_path)}')">⬇ Baixar</button>
-          <button class="mini" onclick="editarMidia('${m.id}','${escJ(m.nome)}',${esc(m.duracao_seg)},'${m.tipo}')">✎ Editar</button>
+          <button class="mini" onclick="editarMidia('${m.id}','${escJ(m.nome)}',${esc(m.duracao_seg)},'${escJ(m.tipo)}')">✎ Editar</button>
           <button class="mini danger" onclick="excluirMidia('${m.id}','${escJ(m.storage_path)}','${escJ(m.nome)}')">🗑 Excluir</button>
         </div>
       </div>
@@ -3490,7 +3493,7 @@ function editarMidia(id, nome, dur, tipo){
     <div id="em_msg" class="fmsg"></div>
     <div class="form-actions">
       <button class="fa-cancel" onclick="fecharModal()">Cancelar</button>
-      <button class="fa-save" onclick="salvarEdicaoMidia('${id}','${tipo}')">Salvar</button>
+      <button class="fa-save" onclick="salvarEdicaoMidia('${escJ(id)}','${escJ(tipo)}')">Salvar</button>
     </div>`);
 }
 async function salvarEdicaoMidia(id, tipo){
@@ -3527,8 +3530,8 @@ async function progEditor(chId){
   const disponiveis = (meds||[]).filter(m=>!naPlaylist.has(m.id));
   const libCards = disponiveis.length ? disponiveis.map(m=>{
     const url=SB_PUBLIC_BASE+m.storage_path; const isVid=m.tipo==='video';
-    const th = isVid?`<video src="${url}#t=0.5" muted preload="metadata" style="width:100%;height:100%;object-fit:cover"></video>`
-                    :`<img src="${url}" loading="lazy" style="width:100%;height:100%;object-fit:cover">`;
+    const th = isVid?`<video src="${escA(url)}#t=0.5" muted preload="metadata" style="width:100%;height:100%;object-fit:cover"></video>`
+                    :`<img src="${escA(url)}" loading="lazy" style="width:100%;height:100%;object-fit:cover">`;
     return `<div class="pl-item">
       <div class="pl-th">${th}</div>
       <div class="pl-meta"><div class="pl-nm">${esc(m.nome)}</div><div class="pl-sub">${isVid?'vídeo · '+fmtDur(m.duracao_seg):m.duracao_seg+'s'}</div></div>
@@ -3550,8 +3553,8 @@ async function progEditor(chId){
   const seq = (items||[]).map((it,i)=>{
     const m=medById[it.media_id]; if(!m) return '';
     const url=SB_PUBLIC_BASE+m.storage_path; const isVid=m.tipo==='video';
-    const th = isVid?`<video src="${url}#t=0.5" muted preload="metadata" style="width:100%;height:100%;object-fit:cover"></video>`
-                    :`<img src="${url}" loading="lazy" style="width:100%;height:100%;object-fit:cover">`;
+    const th = isVid?`<video src="${escA(url)}#t=0.5" muted preload="metadata" style="width:100%;height:100%;object-fit:cover"></video>`
+                    :`<img src="${escA(url)}" loading="lazy" style="width:100%;height:100%;object-fit:cover">`;
     return `<div class="pl-item">
       <div class="pl-ord">${i+1}</div>
       <div class="pl-th">${th}</div>
@@ -3570,7 +3573,7 @@ async function progEditor(chId){
   const resumo = 'O que toca neste canal, em ordem, em loop · '
     + (meds ? meds.length : 0) + ' mídia(s) na conta · '
     + (items ? items.length : 0) + ' no ar';
-  return topbar('Programação · '+ (ch.accounts?ch.accounts.nome:'') +' / '+ch.nome, resumo,
+  return topbar('Programação · '+ esc(ch.accounts?ch.accounts.nome:'') +' / '+esc(ch.nome), resumo,
       `<button class="ghost" onclick="voltarProg()">← Voltar aos canais</button>`)
     + `<div class="prog-grid">
         <div class="panel">
@@ -3617,7 +3620,7 @@ async function removeFromProg(itemId){
   render();
 }
 async function moveProg(itemId, dir){
-  // troca a posicao com o vizinho
+  // troca a posição com o vizinho
   const { data: cur } = await sb.from('playlist_items').select('id,channel_id,posicao').eq('id',itemId).single();
   if(!cur) return;
   const { data: viz } = await sb.from('playlist_items')
@@ -3627,18 +3630,33 @@ async function moveProg(itemId, dir){
   if(!viz||!viz[0]) return;
   const a=cur.posicao, b=viz[0].posicao;
 
-  /* A6 — as duas atualizações iam sem verificação de erro. Se a segunda
-     falhasse, os dois itens ficavam com a MESMA posição e a reordenação
-     passava a se comportar de forma imprevisível, em silêncio.
-     Não há transação no PostgREST, então o caminho é: verificar cada passo e
-     desfazer o primeiro se o segundo falhar. */
-  const r1 = await sb.from('playlist_items').update({posicao:b}).eq('id',cur.id);
+  /* O banco tem a regra "playlist_items_ordem_unica": duas linhas do mesmo canal não podem
+     ter a mesma posição, nem por um instante. Trocar a por b em duas atualizações seguidas
+     fazia o primeiro item ficar com a posição do vizinho e o banco recusava
+     ("duplicate key value violates unique constraint").
+     Agora a troca usa uma posição temporária livre (maior posição do canal + 1), em 3 passos,
+     verificando cada um e desfazendo o que for preciso se algum falhar (o PostgREST não tem
+     transação). Resultado final: as posições nunca se repetem em nenhum passo. */
+  const { data: mx } = await sb.from('playlist_items').select('posicao')
+    .eq('channel_id',cur.channel_id).order('posicao',{ascending:false}).limit(1);
+  const tmp = (mx && mx[0] ? mx[0].posicao : Math.max(a,b)) + 1;
+  const up = (id,pos)=> sb.from('playlist_items').update({posicao:pos}).eq('id',id);
+
+  const r1 = await up(cur.id, tmp);                       // 1) tira o item do caminho
   if(r1.error){ alert('Não foi possível reordenar: '+r1.error.message); return; }
 
-  const r2 = await sb.from('playlist_items').update({posicao:a}).eq('id',viz[0].id);
+  const r2 = await up(viz[0].id, a);                      // 2) vizinho ocupa a posição antiga do item
   if(r2.error){
-    await sb.from('playlist_items').update({posicao:a}).eq('id',cur.id);  // desfaz
+    await up(cur.id, a);                                  // desfaz o passo 1
     alert('Não foi possível reordenar: '+r2.error.message+'\nA ordem anterior foi mantida.');
+    return;
+  }
+
+  const r3 = await up(cur.id, b);                         // 3) item assume a posição do vizinho
+  if(r3.error){
+    await up(viz[0].id, b);                               // desfaz o passo 2
+    await up(cur.id, a);                                  // desfaz o passo 1
+    alert('Não foi possível reordenar: '+r3.error.message+'\nA ordem anterior foi mantida.');
     return;
   }
   render();
@@ -3806,7 +3824,7 @@ async function verTela(channelId, nomeCanal){
   const nomeEsc = escJ(nomeCanal);
   abrirModal(
     '<h3>Tela do box</h3>'+
-    '<div class="fsub">'+ (nomeCanal||'') +'</div>'+
+    '<div class="fsub">'+ esc(nomeCanal||'') +'</div>'+
     '<div id="snapWrap" style="margin:12px 0;min-height:170px;display:flex;align-items:center;'+
       'justify-content:center;background:#000;border-radius:10px;overflow:hidden">'+
       '<div style="color:#8a8a92;font-size:12.5px;padding:26px;text-align:center">'+
@@ -3913,7 +3931,7 @@ async function editarInventario(channelId, nomeCanal){
     if(data) atual = data;
   }catch(e){}
   abrirModal(
-    '<h3>Dispositivo</h3><div class="fsub">'+(nomeCanal||'')+'</div>'+
+    '<h3>Dispositivo</h3><div class="fsub">'+esc(nomeCanal||'')+'</div>'+
     '<div class="fld"><label>MAC Wi-Fi</label>'+
       '<input id="iv_mac_wifi" placeholder="9C:00:D3:CC:83:5E" maxlength="17" '+
       'value="'+String(atual.mac_wifi||'').replace(/"/g,'&quot;')+'"></div>'+
@@ -4105,7 +4123,7 @@ function linhaOverview(c){
   const visto=c.last_seen_at?tempoRel(c.last_seen_at):'nunca';
   const tags=(c.tags||[]);
   const tagsHtml = tags.length
-    ? tags.map(t=>'<span style="background:var(--chip-bg);color:var(--mut);font-size:10.5px;padding:2px 7px;border-radius:12px;margin-right:4px">'+t+'</span>').join('')
+    ? tags.map(t=>'<span style="background:var(--chip-bg);color:var(--mut);font-size:10.5px;padding:2px 7px;border-radius:12px;margin-right:4px">'+esc(t)+'</span>').join('')
     : '<span style="color:var(--mut3);font-size:11px">sem tags</span>';
   const pend = (c.autorizado === false);
   return `<tr class="row">
@@ -4119,10 +4137,10 @@ function linhaOverview(c){
       <button class="mini" onclick="verTela('${c.id}','${escJ(c.nome)}')">◱ Ver tela</button>
       ${COLS_EXTRAS===false ? '' : `<button class="mini" onclick="acessoRemoto('${c.id}','${escJ(c.nome)}')" title="${c.rustdesk_id?'RustDesk '+escA(c.rustdesk_id):'RustDesk não configurado'}">⧉ Remoto</button>`}
       <button class="mini" onclick="pedirRefresh('${c.id}','${escJ(c.nome)}')">⟳ Atualizar tela</button>
-      ${COLS_EXTRAS===false ? '' : `<button class="mini" onclick='editarTags("${c.id}","${escA(c.nome)}",${escA(JSON.stringify(tags))})'>⌗ Tags</button>`}
+      ${COLS_EXTRAS===false ? '' : `<button class="mini" onclick='editarTags("${c.id}","${escJ(c.nome)}",${escA(JSON.stringify(tags))})'>⌗ Tags</button>`}
       ${COLS_EXTRAS===false ? '' : pend
-        ? `<button class="mini" style="background:#332a10;border-color:#4a3d1c;color:#F5C518" onclick='autorizar("${c.id}",true,"${escA(c.nome)}")'>✓ Autorizar</button>`
-        : `<button class="mini" onclick='autorizar("${c.id}",false,"${escA(c.nome)}")' title="revogar autorização">⊘</button>`}
+        ? `<button class="mini" style="background:#332a10;border-color:#4a3d1c;color:#F5C518" onclick='autorizar("${c.id}",true,"${escJ(c.nome)}")'>✓ Autorizar</button>`
+        : `<button class="mini" onclick='autorizar("${c.id}",false,"${escJ(c.nome)}")' title="revogar autorização">⊘</button>`}
     </td>
   </tr>`;
 }
@@ -4209,7 +4227,7 @@ async function editarTags(channelId, nome, atuais){
   }catch(e){}
   const val = (atuais||[]).join(', ');
   abrirModal(
-    '<h3>Tags</h3><div class="fsub">'+nome+'</div>'+
+    '<h3>Tags</h3><div class="fsub">'+esc(nome)+'</div>'+
     '<div class="fld"><label>Separadas por vírgula</label>'+
       '<input id="tg_in" placeholder="hilton, rj, migrado" value="'+val.replace(/"/g,'&quot;')+'"></div>'+
     (sugestoes.length
@@ -4251,7 +4269,7 @@ async function acessoRemoto(channelId, nomeCanal){
   const idv = (cred.rustdesk_id||''), sev = (cred.rustdesk_senha||'');
   abrirModal(
     '<h3>Acesso remoto</h3>'+
-    '<div class="fsub">'+(nomeCanal||'')+' · RustDesk</div>'+
+    '<div class="fsub">'+esc(nomeCanal||'')+' · RustDesk</div>'+
     '<div class="fld"><label>ID do RustDesk</label>'+
       '<input id="rd_id" placeholder="ex: 1234567890" value="'+idv.replace(/"/g,'&quot;')+'"></div>'+
     '<div class="fld"><label>Senha de acesso permanente</label>'+
