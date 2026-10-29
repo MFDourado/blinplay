@@ -423,7 +423,9 @@
 
   .loading{color:var(--mut);padding:40px;text-align:center;font-size:14px}
   .form-modal{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1500;display:flex;align-items:center;justify-content:center;padding:20px}
-  .form-box{background:linear-gradient(180deg,var(--surf),var(--bg2));border:1px solid var(--line2);border-radius:16px;padding:26px;width:100%;max-width:440px;box-shadow:0 40px 80px -30px rgba(0,0,0,.8)}
+  .form-box{background:linear-gradient(180deg,var(--surf),var(--bg2));border:1px solid var(--line2);border-radius:16px;padding:26px;width:100%;max-width:440px;box-shadow:0 40px 80px -30px rgba(0,0,0,.8);
+    /* janelas altas (ex.: Novo usuário com 19 hotéis) passavam do tamanho da tela e não rolavam: */
+    max-height:calc(100vh - 40px);max-height:calc(100dvh - 40px);overflow-y:auto;overscroll-behavior:contain}
   .form-box h3{font-size:18px;margin-bottom:4px}
   .form-box .fsub{color:var(--mut);font-size:12.5px;margin-bottom:18px}
   .form-box .fld{margin-bottom:13px}
@@ -702,7 +704,7 @@ function escJ(v){
    Existe porque, sem ela, não há como saber qual index.html está publicado —
    e subir um arquivo antigo por engano é indistinguível de um recurso que
    não funcionou. */
-const PAINEL_VERSAO = 'v3.5';
+const PAINEL_VERSAO = 'v3.6';
 console.log('[BlinPlay] painel', PAINEL_VERSAO);
 
 /* ---------------- NAVEGAÇÃO ---------------- */
