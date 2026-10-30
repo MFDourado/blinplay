@@ -704,7 +704,7 @@ function escJ(v){
    Existe porque, sem ela, não há como saber qual index.html está publicado —
    e subir um arquivo antigo por engano é indistinguível de um recurso que
    não funcionou. */
-const PAINEL_VERSAO = 'v3.6';
+const PAINEL_VERSAO = 'v3.7';
 console.log('[BlinPlay] painel', PAINEL_VERSAO);
 
 /* ---------------- NAVEGAÇÃO ---------------- */
@@ -1354,6 +1354,7 @@ async function salvarWidget(accountId, tipo){
   }
 }
 let ROLE='admin', CUR='overview';
+let MEU_PAPEL = null;   // papel do cadastro (profiles.role): gerente_geral, gerente_unidade, marketing, cliente...
 
 function canalOnline(c){
   return estaOnline(c.last_seen_at);
@@ -1476,6 +1477,7 @@ async function doLogin(){
     if(pErr || !prof){ showMsg('Perfil não encontrado. Fale com a Blincast.','err'); resetBtn(); return; }
     if(prof.ativo===false){ showMsg('Usuário inativo. Fale com a Blincast.','err'); await sb.auth.signOut(); resetBtn(); return; }
 
+    MEU_PAPEL = prof.role || null;
     // superadmin entra direto no painel Blincast
     if(prof.role==='superadmin'){
       showMsg('Bem-vindo, '+(prof.nome||email)+'!','ok');
@@ -1569,6 +1571,7 @@ async function definirSenha(){
 }
 async function entrarAposConvite(userId){
   const { data: prof } = await sb.from('profiles').select('role,nome').eq('id',userId).single();
+  MEU_PAPEL = prof ? (prof.role || null) : null;
   if(prof && prof.role==='superadmin'){ enter('admin'); return; }
   const { data: vinc } = await sb.from('user_accounts')
     .select('account_id, papel, accounts(nome,cnpj)').eq('user_id',userId);
@@ -1624,6 +1627,7 @@ async function logout(){
   monDesligar();
   MON = { chs:[], tab:'pan', sel:null, hist:{}, voltas:null, voltasEm:0, t15:null, t1:null, atual:null };
   DV_CHS = []; DV_BUSCA = '';
+  MEU_PAPEL = null;
   CLI_PROG = { sel:null, chs:[], meds:[], itens:[], camps:[], widgets:[], disp:{} };
   EST_CHS = []; EST_NPL = {}; REL_ULTIMO = null; WG_ACCS = []; REL_ACCS = [];
   const bn = document.getElementById('bannerOffline'); if(bn) bn.remove();
@@ -2691,6 +2695,8 @@ const VIEWS = {
     const { data: chs, error } = await sb.from('channels')
       .select('id,nome,device_token,last_seen_at,player_version').eq('account_id',CLI_ACC.id).eq('ativo',true).order('created_at');
     if(error) throw error;
+    // o link do canal contém o token (funciona como senha): só o Gerente geral enxerga os botões dele
+    const podeLink = (MEU_PAPEL === 'gerente_geral');
     let rows;
     if(!chs||chs.length===0){
       rows='<tr><td colspan="4"><div class="empty"><b>Nenhum canal</b>A Blincast instala e configura seus canais.</div></td></tr>';
@@ -2698,17 +2704,27 @@ const VIEWS = {
       rows=chs.map(c=>{
         const online=estaOnline(c.last_seen_at);
         const visto=c.last_seen_at?tempoRel(c.last_seen_at):'nunca';
+        const link = (podeLink && c.device_token)
+          ? `<button class="mini" onclick="copiarLinkCanal('${escJ(urlPlayerCanal(c.device_token))}')">⧉ Copiar link</button>
+             <button class="mini" onclick="abrirLinkCanal('${escJ(urlPlayerCanal(c.device_token))}')">↗ Abrir link</button>` : '';
         return `<tr class="row">
           <td><div class="est-name">${esc(c.nome)}</div></td>
-          <td><span class="stat ${online?'on':'off'}"><span class="dot ${online?'on':'off'}"></span>${online?'Online':'Offline'}</span></td>
-          <td style="color:var(--mut)">${visto}</td>
-          <td style="white-space:nowrap"><button class="mini" onclick="pedirRefresh('${c.id}','${escJ(c.nome)}')">⟳ Atualizar tela</button></td>
+          <td style="white-space:nowrap"><span class="stat ${online?'on':'off'}"><span class="dot ${online?'on':'off'}"></span>${online?'Online':'Offline'}</span></td>
+          <td style="color:var(--mut);white-space:nowrap">${visto}</td>
+          <td><div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="mini" onclick="pedirRefresh('${c.id}','${escJ(c.nome)}')">⟳ Atualizar tela</button>
+            <button class="mini" onclick="verTela('${c.id}','${escJ(c.nome)}')">◱ Ver tela</button>
+            ${link}
+          </div></td>
         </tr>`;
       }).join('');
     }
+    const aviso = (podeLink && chs && chs.length)
+      ? `<div style="margin-top:12px;line-height:1.55;font-size:12.5px;color:var(--mut)">O link abre, em qualquer navegador ou TV, o que está passando neste canal. Trate-o como uma senha e não o compartilhe.
+         <b>Enquanto o link estiver aberto, o canal aparece como online no painel, mesmo que o box esteja desligado.</b></div>` : '';
     return topbar('Meus Canais', esc(CLI_ACC.nome)+' · status dos boxes','')
       +`<div class="panel"><div class="panel-h"><h3>Canais</h3><span class="hint">online = visto nos últimos 5 min</span></div>
-        <table><thead><tr><th>Canal</th><th>Status</th><th>Último acesso</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+        <table><thead><tr><th>Canal</th><th>Status</th><th>Último acesso</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${aviso}`;
   },
 
   // gerente de rede: todas as unidades que ele acessa, de uma vez só —
@@ -2816,6 +2832,13 @@ function tempoRel(ts){
   if(s<86400) return Math.floor(s/3600)+' h';
   return Math.floor(s/86400)+' d';
 }
+function urlPlayerCanal(token){ return location.origin+location.pathname.replace(/index\.html$/,'')+'player.html?token='+token; }
+function copiarLinkCanal(url){
+  const fim = ()=> alert('Link copiado.\n\nCole-o no navegador da TV para ver o que está passando neste canal. Trate o link como uma senha: não o compartilhe.');
+  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(fim).catch(()=>prompt('Copie o link do canal:', url));
+  else prompt('Copie o link do canal:', url);
+}
+function abrirLinkCanal(url){ window.open(url, '_blank', 'noopener,noreferrer'); }
 function copiarURL(url){
   navigator.clipboard.writeText(url).then(()=>{
     alert('URL do player copiada:\n\n'+url+'\n\nCole esta URL no Fully Kiosk do box.');
